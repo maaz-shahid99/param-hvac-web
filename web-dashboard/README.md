@@ -23,10 +23,25 @@ Server), so you avoid CORS locally. Point the proxy elsewhere with
 ```bash
 npm run build        # outputs dist/  (static files)
 ```
-Serve `dist/` from any static host (or behind the same Nginx as the Cloud
-Server). In production the app calls the cloud URL **directly**, so the server's
-`CORS_ORIGINS` must include this dashboard's origin, e.g.
-`CORS_ORIGINS=https://app.yourdomain.com`.
+
+### Easiest: serve it from the Cloud Server (single URL, no CORS)
+The Cloud Server auto-serves this build at its **root** if `web-dashboard/dist`
+exists (override the path with `WEB_DIR`). Then there's one origin for both the
+API and the app — **no CORS needed**:
+```bash
+cd web-dashboard && npm run build           # produces dist/
+cd "../Cloud Server" && uvicorn app:app --host 0.0.0.0 --port 8002
+# open http://<server-ip>:8002/   -> the dashboard; /v1/* is the API
+```
+On startup the server logs `[web] serving dashboard from … at /`. Client-side
+routes (e.g. `/devices`) fall back to `index.html`, and the app calls `/v1/...`
+on the same origin, so nothing else to configure.
+
+### Or host the static files separately
+Serve `dist/` from any static host / Nginx. Then the browser calls the cloud
+**cross-origin**, so set the server's `CORS_ORIGINS` to this dashboard's origin,
+e.g. `CORS_ORIGINS=https://app.yourdomain.com`, and point the app at the cloud
+URL (Settings, or `VITE_CLOUD_URL` at build time).
 
 ## Roles (same model as the app)
 - **Member** — Dashboard, Devices, Alerts (view + ACK), Members (read-only),
