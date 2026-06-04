@@ -3,6 +3,7 @@ import { useAuth } from "../auth";
 
 const items = [
   { to: "/", label: "Dashboard", ico: "📊", end: true },
+  { to: "/visualization", label: "Visualization", ico: "🌀" },
   { to: "/devices", label: "Devices", ico: "🖥️" },
   { to: "/alerts", label: "Alerts & Thresholds", ico: "🔔" },
   { to: "/members", label: "Members", ico: "👥" },

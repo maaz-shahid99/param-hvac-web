@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import PendingPage from "./pages/PendingPage";
 import DashboardPage from "./pages/DashboardPage";
+import VisualizationPage from "./pages/VisualizationPage";
 import DevicesPage from "./pages/DevicesPage";
 import AlertsThresholdsPage from "./pages/AlertsThresholdsPage";
 import MembersPage from "./pages/MembersPage";
@@ -20,6 +21,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
+        <Route path="visualization" element={<VisualizationPage />} />
         <Route path="devices" element={<DevicesPage />} />
         <Route path="alerts" element={<AlertsThresholdsPage />} />
         <Route path="members" element={<MembersPage />} />

@@ -13,6 +13,41 @@ export function isOnline(ts: number) {
   return nowSec() - ts < STALE_SECONDS;
 }
 
+// Temperature -> colour ramp (blue -> green -> amber -> red).
+export function tempColor(t: number): string {
+  const stops: [number, [number, number, number]][] = [
+    [15, [90, 140, 210]],
+    [28, [80, 180, 120]],
+    [40, [235, 180, 50]],
+    [55, [230, 90, 70]],
+  ];
+  if (t <= stops[0][0]) return rgb(stops[0][1]);
+  if (t >= stops[stops.length - 1][0]) return rgb(stops[stops.length - 1][1]);
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [a, ca] = stops[i];
+    const [b, cb] = stops[i + 1];
+    if (t >= a && t <= b) {
+      const k = (t - a) / (b - a);
+      return rgb([
+        Math.round(ca[0] + (cb[0] - ca[0]) * k),
+        Math.round(ca[1] + (cb[1] - ca[1]) * k),
+        Math.round(ca[2] + (cb[2] - ca[2]) * k),
+      ]);
+    }
+  }
+  return rgb(stops[0][1]);
+}
+function rgb(c: [number, number, number]) {
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// Hotter sensor -> faster fan. Returns seconds per revolution.
+export function tempSpinSeconds(t: number): number {
+  const lo = 18, hi = 55, slow = 2.6, fast = 0.5;
+  const k = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
+  return slow + (fast - slow) * k;
+}
+
 const KIND_LABEL: Record<string, string> = {
   high_temp: "🔥 High temperature",
   delta: "↔ High ΔT",
