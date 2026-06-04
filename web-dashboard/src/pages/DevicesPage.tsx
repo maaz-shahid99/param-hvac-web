@@ -4,30 +4,36 @@ import { ago, isOnline, nowSec } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
 import PageHeader from "../components/PageHeader";
 
-// Sensors with online/offline. Merges the cloud's last-reading data with the
-// commissioned set from the rack topology (so never-reported sensors still show
-// as offline). Gateways/routers aren't shown on the web (no Bluetooth).
-type Router = { eui: string; online: boolean; ts: number };
+// Devices = the C6 mesh nodes (gateway + routers, with roles) and the sensors.
+// Sensors merge the cloud's last-reading data with the commissioned set from the
+// rack topology (so never-reported sensors still show as offline).
+type MeshNode = { eui: string; online: boolean; ts: number; kind: string };
 
 export default function DevicesPage() {
   const [rows, setRows] = useState<{ eui: string; label: string; ts: number; online: boolean }[]>([]);
-  const [routers, setRouters] = useState<Router[]>([]);
+  const [mesh, setMesh] = useState<MeshNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   async function refresh() {
     try {
       const [c, topo] = await Promise.all([api.current(), api.topology()]);
-      // Router roster (older servers won't have the endpoint — ignore failures).
+      // Mesh roster (older servers won't have the endpoint — ignore failures).
       try {
         const rt = await api.routers();
-        setRouters(
-          (rt.routers || []).map((r: any) => ({
-            eui: String(r.eui),
-            online: !!r.online,
-            ts: Number(r.last_seen) || 0,
-          }))
+        const nodes: MeshNode[] = (rt.routers || []).map((r: any) => ({
+          eui: String(r.eui),
+          online: !!r.online,
+          ts: Number(r.last_seen) || 0,
+          kind: String(r.kind || "router"),
+        }));
+        // gateways first, then online before offline
+        nodes.sort((a, b) =>
+          a.kind !== b.kind
+            ? a.kind === "gateway" ? -1 : 1
+            : a.online === b.online ? a.eui.localeCompare(b.eui) : a.online ? -1 : 1
         );
+        setMesh(nodes);
       } catch {/* no /v1/routers */}
       const byEui: Record<string, { eui: string; label: string; ts: number; online: boolean }> = {};
       // commissioned set from topology
@@ -67,7 +73,7 @@ export default function DevicesPage() {
   }, []);
 
   const online = rows.filter((r) => r.online).length;
-  const routersOnline = routers.filter((r) => r.online).length;
+  const meshOnline = mesh.filter((r) => r.online).length;
 
   return (
     <>
@@ -79,30 +85,33 @@ export default function DevicesPage() {
         <GatewayStatus />
 
         <div className="card">
-          <div className="hd">Routers ({routersOnline}/{routers.length} online)</div>
-          {routers.length === 0 ? (
+          <div className="hd">Mesh nodes ({meshOnline}/{mesh.length} online)</div>
+          {mesh.length === 0 ? (
             <div className="bd muted">
-              No routers in the mesh yet. Commission a router — it just joins the
-              network (sensors relay through it) and appears here.
+              No mesh nodes reported yet. The active gateway and any routers appear
+              here once the gateway reports the roster to the cloud.
             </div>
           ) : (
-            routers.map((d) => (
-              <div className="row" key={d.eui}>
-                <div className="btnrow">
-                  <span className={`dot-s ${d.online ? "on" : "off"}`} />
-                  <div>
-                    <div>Router</div>
-                    <div className="small muted mono">
-                      {d.eui}
-                      {d.ts > 0 ? ` · ${ago(nowSec() - d.ts)}` : ""}
+            mesh.map((d) => {
+              const isGw = d.kind === "gateway";
+              return (
+                <div className="row" key={d.eui}>
+                  <div className="btnrow">
+                    <span className={`dot-s ${d.online ? "on" : "off"}`} />
+                    <div>
+                      <div>{isGw ? "🛰️ Gateway (active)" : "🧭 Router"}</div>
+                      <div className="small muted mono">
+                        {d.eui}
+                        {d.ts > 0 ? ` · ${ago(nowSec() - d.ts)}` : ""}
+                      </div>
                     </div>
                   </div>
+                  <span className={`badge ${d.online ? "green" : "grey"}`}>
+                    {d.online ? "ONLINE" : "OFFLINE"}
+                  </span>
                 </div>
-                <span className={`badge ${d.online ? "green" : "grey"}`}>
-                  {d.online ? "ONLINE" : "OFFLINE"}
-                </span>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
