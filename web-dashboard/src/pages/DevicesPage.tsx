@@ -7,14 +7,28 @@ import PageHeader from "../components/PageHeader";
 // Sensors with online/offline. Merges the cloud's last-reading data with the
 // commissioned set from the rack topology (so never-reported sensors still show
 // as offline). Gateways/routers aren't shown on the web (no Bluetooth).
+type Router = { eui: string; online: boolean; ts: number };
+
 export default function DevicesPage() {
   const [rows, setRows] = useState<{ eui: string; label: string; ts: number; online: boolean }[]>([]);
+  const [routers, setRouters] = useState<Router[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   async function refresh() {
     try {
       const [c, topo] = await Promise.all([api.current(), api.topology()]);
+      // Router roster (older servers won't have the endpoint — ignore failures).
+      try {
+        const rt = await api.routers();
+        setRouters(
+          (rt.routers || []).map((r: any) => ({
+            eui: String(r.eui),
+            online: !!r.online,
+            ts: Number(r.last_seen) || 0,
+          }))
+        );
+      } catch {/* no /v1/routers */}
       const byEui: Record<string, { eui: string; label: string; ts: number; online: boolean }> = {};
       // commissioned set from topology
       for (const r of topo.topology?.racks || []) {
@@ -53,6 +67,7 @@ export default function DevicesPage() {
   }, []);
 
   const online = rows.filter((r) => r.online).length;
+  const routersOnline = routers.filter((r) => r.online).length;
 
   return (
     <>
@@ -62,6 +77,35 @@ export default function DevicesPage() {
       <div className="page">
         {err && <div className="error">{err}</div>}
         <GatewayStatus />
+
+        <div className="card">
+          <div className="hd">Routers ({routersOnline}/{routers.length} online)</div>
+          {routers.length === 0 ? (
+            <div className="bd muted">
+              No routers in the mesh yet. Commission a router — it just joins the
+              network (sensors relay through it) and appears here.
+            </div>
+          ) : (
+            routers.map((d) => (
+              <div className="row" key={d.eui}>
+                <div className="btnrow">
+                  <span className={`dot-s ${d.online ? "on" : "off"}`} />
+                  <div>
+                    <div>Router</div>
+                    <div className="small muted mono">
+                      {d.eui}
+                      {d.ts > 0 ? ` · ${ago(nowSec() - d.ts)}` : ""}
+                    </div>
+                  </div>
+                </div>
+                <span className={`badge ${d.online ? "green" : "grey"}`}>
+                  {d.online ? "ONLINE" : "OFFLINE"}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="card">
           <div className="hd">Sensors ({online}/{rows.length} online)</div>
           {loading ? (

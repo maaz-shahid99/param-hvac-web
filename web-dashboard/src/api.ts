@@ -84,6 +84,7 @@ export const api = {
   putThreshold: (b: Record<string, unknown>) =>
     req("/v1/thresholds", { method: "PUT", body: b }),
   current: () => req("/v1/current"),
+  routers: () => req("/v1/routers"),
   alerts: (state = "open") => req(`/v1/alerts?state=${state}`),
   ackAlert: (id: string) => req(`/v1/alerts/${id}/ack`, { method: "POST" }),
   setRecipients: (b: Record<string, unknown>) =>
