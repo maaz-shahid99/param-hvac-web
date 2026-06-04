@@ -18,6 +18,7 @@ export default function Layout() {
         <div className="brand">
           <span className="dot" /> HVAC Monitor
         </div>
+        <div className="nav-group">Monitoring</div>
         <nav className="nav">
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end}>

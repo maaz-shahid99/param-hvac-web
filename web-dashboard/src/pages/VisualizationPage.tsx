@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import Fan from "../components/Fan";
 import { isOnline, tempColor } from "../components/Cards";
+import PageHeader from "../components/PageHeader";
 
 type Reading = { temp: number; ts: number };
 
@@ -55,10 +56,9 @@ export default function VisualizationPage() {
 
   return (
     <>
-      <div className="topbar">
-        <h1>Visualization</h1>
+      <PageHeader title="Visualization">
         <button className="secondary" onClick={refresh}>Refresh</button>
-      </div>
+      </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
 

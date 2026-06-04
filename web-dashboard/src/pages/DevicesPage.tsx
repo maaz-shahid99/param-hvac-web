@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ago, isOnline, nowSec } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
+import PageHeader from "../components/PageHeader";
 
 // Sensors with online/offline. Merges the cloud's last-reading data with the
 // commissioned set from the rack topology (so never-reported sensors still show
@@ -55,10 +56,9 @@ export default function DevicesPage() {
 
   return (
     <>
-      <div className="topbar">
-        <h1>Devices</h1>
+      <PageHeader title="Devices">
         <button className="secondary" onClick={refresh}>Refresh</button>
-      </div>
+      </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
         <GatewayStatus />

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { AlertsCard, LiveTempsCard } from "../components/Cards";
+import PageHeader from "../components/PageHeader";
 
 export default function AlertsThresholdsPage() {
   const { isAdmin } = useAuth();
@@ -82,14 +83,11 @@ export default function AlertsThresholdsPage() {
 
   return (
     <>
-      <div className="topbar">
-        <h1>Alerts & Thresholds</h1>
-        <div className="btnrow">
-          {isAdmin && <button className="secondary" onClick={genKey}>Gateway API key</button>}
-          {isAdmin && <button className="secondary" onClick={setRecipients}>Recipients</button>}
-          <button className="secondary" onClick={() => refresh(false)}>Refresh</button>
-        </div>
-      </div>
+      <PageHeader title="Alerts & Thresholds">
+        {isAdmin && <button className="secondary" onClick={genKey}>Gateway API key</button>}
+        {isAdmin && <button className="secondary" onClick={setRecipients}>Recipients</button>}
+        <button className="secondary" onClick={() => refresh(false)}>Refresh</button>
+      </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
         <AlertsCard alerts={alerts} onAck={ack} />

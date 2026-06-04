@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import PageHeader from "../components/PageHeader";
 
 export default function MembersPage() {
   const { isAdmin, profile } = useAuth();
@@ -38,10 +39,9 @@ export default function MembersPage() {
 
   return (
     <>
-      <div className="topbar">
-        <h1>Members</h1>
+      <PageHeader title="Members">
         <button className="secondary" onClick={load}>Refresh</button>
-      </div>
+      </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
 

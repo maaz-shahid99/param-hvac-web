@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getBaseUrl, setBaseUrl } from "../api";
 import { useAuth } from "../auth";
+import PageHeader from "../components/PageHeader";
 
 export default function SettingsPage() {
   const { profile, signOut } = useAuth();
@@ -15,9 +16,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="topbar">
-        <h1>Settings</h1>
-      </div>
+      <PageHeader title="Settings" />
       <div className="page">
         <div className="card">
           <div className="hd">Cloud server</div>
