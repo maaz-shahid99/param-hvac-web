@@ -90,5 +90,6 @@ export const api = {
     req("/v1/recipients", { method: "PUT", body: b }),
   createApiKey: (label: string) =>
     req("/v1/apikeys", { method: "POST", body: { label } }),
+  apiKeys: () => req("/v1/apikeys"),
   topology: () => req("/v1/topology"),
 };

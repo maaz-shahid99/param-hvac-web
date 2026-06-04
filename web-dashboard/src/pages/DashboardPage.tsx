@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AlertsCard, LiveTempsCard, isOnline } from "../components/Cards";
+import GatewayStatus from "../components/GatewayStatus";
 
 export default function DashboardPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
@@ -62,6 +63,7 @@ export default function DashboardPage() {
             <div className="l">sensors online</div>
           </div>
         </div>
+        <GatewayStatus />
         <AlertsCard alerts={alerts} onAck={ack} />
         <LiveTempsCard sensors={sensors} highLimit={high} />
       </div>
