@@ -3,6 +3,7 @@ import { api } from "../api";
 import Fan from "../components/Fan";
 import { isOnline, tempColor } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
+import Icon from "../components/Icon";
 
 type Reading = { temp: number; ts: number };
 
@@ -18,7 +19,11 @@ export default function VisualizationPage() {
       setRacks(topo.topology?.racks || []);
       const map: Record<string, Reading> = {};
       for (const s of cur.sensors || []) {
-        map[String(s.eui).toLowerCase()] = { temp: Number(s.max_c), ts: Number(s.ts) || 0 };
+        const eui = String(s.eui).toLowerCase();
+        const ts = Number(s.ts) || 0;
+        const prev = map[eui];
+        if (!prev || ts >= prev.ts) map[eui] = { temp: Number(s.max_c), ts }; // per-sensor hottest
+        if (s.rom) map[`${eui}:${String(s.rom).toLowerCase()}`] = { temp: s.temp != null ? Number(s.temp) : NaN, ts };
       }
       setReadings(map);
       setErr(null);
@@ -37,8 +42,10 @@ export default function VisualizationPage() {
 
   function portView(port: any) {
     const eui = (port.assignedEui || "").toLowerCase();
-    const r = eui ? readings[eui] : undefined;
-    const online = !!r && isOnline(r.ts);
+    const rom = (port.assignedProbeRom || "").toLowerCase();
+    // per-probe reading when the port maps a specific probe, else the sensor's hottest
+    const r = rom ? readings[`${eui}:${rom}`] : eui ? readings[eui] : undefined;
+    const online = !!r && isOnline(r.ts) && Number.isFinite(r.temp);
     const tempC = r ? r.temp : null;
     return (
       <div className="fan-tile" key={port.id} title={eui || "unassigned"}>
@@ -57,7 +64,7 @@ export default function VisualizationPage() {
   return (
     <>
       <PageHeader title="Visualization">
-        <button className="secondary" onClick={refresh}>Refresh</button>
+        <button className="secondary" onClick={refresh}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
@@ -83,7 +90,7 @@ export default function VisualizationPage() {
             {racks.map((rack) => (
               <div className="rack" key={rack.id}>
                 <div className="rack-hd">
-                  <span>🗄️ {rack.name}</span>
+                  <span className="hd-ico"><Icon name="dns" size={17} /> {rack.name}</span>
                   <span className="small muted">{(rack.units || []).length} units</span>
                 </div>
                 <div className="rack-body">

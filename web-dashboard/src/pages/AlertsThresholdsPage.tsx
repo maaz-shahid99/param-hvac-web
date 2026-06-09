@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { AlertsCard, LiveTempsCard } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
+import Icon from "../components/Icon";
 
 export default function AlertsThresholdsPage() {
   const { isAdmin } = useAuth();
@@ -84,16 +85,16 @@ export default function AlertsThresholdsPage() {
   return (
     <>
       <PageHeader title="Alerts & Thresholds">
-        {isAdmin && <button className="secondary" onClick={genKey}>Gateway API key</button>}
-        {isAdmin && <button className="secondary" onClick={setRecipients}>Recipients</button>}
-        <button className="secondary" onClick={() => refresh(false)}>Refresh</button>
+        {isAdmin && <button className="secondary" onClick={genKey}><Icon name="vpn_key" size={17} /> Gateway API key</button>}
+        {isAdmin && <button className="secondary" onClick={setRecipients}><Icon name="group" size={17} /> Recipients</button>}
+        <button className="secondary" onClick={() => refresh(false)}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
         <AlertsCard alerts={alerts} onAck={ack} />
 
         <div className="card">
-          <div className="hd">Alert thresholds</div>
+          <div className="hd hd-ico"><Icon name="tune" size={18} /> Alert thresholds</div>
           <div className="bd">
             <div className="small muted">
               Applied to every rack unless overridden. Defaults: {defs.high_c}°C / Δ{defs.delta_c}°C.

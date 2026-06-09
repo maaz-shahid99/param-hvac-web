@@ -3,6 +3,7 @@ import { api } from "../api";
 import { AlertsCard, LiveTempsCard, isOnline } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
 import PageHeader from "../components/PageHeader";
+import Icon from "../components/Icon";
 
 export default function DashboardPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
@@ -53,7 +54,7 @@ export default function DashboardPage() {
         {/* Hero — emergency when there are open alerts, calm otherwise */}
         {top ? (
           <div className="hero">
-            <h3>⚠ {top.kind === "stale" ? "Sensor offline" : top.kind === "delta" ? "High ΔT" : "High temperature"}</h3>
+            <h3 className="hd-ico"><Icon name="warning" size={24} fill /> {top.kind === "stale" ? "Sensor offline" : top.kind === "delta" ? "High ΔT" : "High temperature"}</h3>
             <div className="sub">{top.location || "Unmapped"}{alerts.length > 1 ? ` · +${alerts.length - 1} more open` : ""}</div>
             <div className="pills">
               <div className="pill"><div className="k">Reading</div><div className="v2">{top.kind === "stale" ? "—" : `${(+top.value).toFixed(1)}°C`}</div></div>
@@ -63,18 +64,18 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="hero calm">
-            <h3>✓ All clear</h3>
+            <h3 className="hd-ico"><Icon name="task_alt" size={24} fill /> All clear</h3>
             <div className="sub">No open alerts — every rack is within limits.</div>
           </div>
         )}
 
         {/* Daily insights tiles */}
         <div className="stats">
-          <Stat label="Open alerts" value={`${alerts.length}`} chip="pink" icon="🔔"
+          <Stat label="Open alerts" value={`${alerts.length}`} chip="pink" icon="notifications"
             delta={alerts.length ? { dir: "down", text: "needs attention" } : { dir: "up", text: "all clear" }} />
-          <Stat label="Sensors online" value={`${online}`} unit={`/ ${sensors.length}`} chip="green" icon="📡"
+          <Stat label="Sensors online" value={`${online}`} unit={`/ ${sensors.length}`} chip="green" icon="sensors"
             delta={offline ? { dir: "down", text: `${offline} offline` } : { dir: "up", text: "all reporting" }} />
-          <Stat label="Hottest now" value={hottest ? hottest.toFixed(1) : "—"} unit={hottest ? "°C" : ""} chip="amber" icon="🌡️"
+          <Stat label="Hottest now" value={hottest ? hottest.toFixed(1) : "—"} unit={hottest ? "°C" : ""} chip="amber" icon="thermostat"
             delta={{ dir: hottest >= high ? "down" : "flat", text: hottest >= high ? "over limit" : "within limit" }} />
         </div>
 
@@ -92,15 +93,15 @@ function Stat({
   label: string; value: string; unit?: string; chip: string; icon: string;
   delta: { dir: "up" | "down" | "flat"; text: string };
 }) {
-  const arrow = delta.dir === "up" ? "▲" : delta.dir === "down" ? "▼" : "•";
+  const arrow = delta.dir === "up" ? "trending_up" : delta.dir === "down" ? "trending_down" : "trending_flat";
   return (
     <div className="stat">
       <div className="stat-top">
         <span className="l">{label}</span>
-        <span className={`chip ${chip}`}>{icon}</span>
+        <span className={`iconwrap ${chip}`}><Icon name={icon} size={20} /></span>
       </div>
       <div className="v">{value}{unit ? <span className="u">{unit}</span> : null}</div>
-      <div className={`delta ${delta.dir}`}>{arrow} {delta.text}</div>
+      <div className={`delta ${delta.dir} hd-ico`}><Icon name={arrow} size={15} /> {delta.text}</div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ago, nowSec } from "./Cards";
+import Icon from "./Icon";
 
 // The cloud knows a gateway is alive when it POSTs readings — that stamps the
 // gateway's API-key `last_used_at`. We treat the most recently used key as the
@@ -46,7 +47,7 @@ export default function GatewayStatus() {
 
   return (
     <div className="card">
-      <div className="hd">🛰️ Gateway</div>
+      <div className="hd hd-ico"><Icon name="router" size={18} /> Gateway</div>
       <div className="row">
         <div className="btnrow">
           <span className={`dot-s ${online ? "on" : "off"}`} />

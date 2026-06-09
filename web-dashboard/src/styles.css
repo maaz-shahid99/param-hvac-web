@@ -58,7 +58,58 @@ a { color: var(--text); text-decoration: none; }
 .nav a:hover { background: var(--surface-2); color: var(--text); }
 .nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav a.active::before { content:""; position:absolute; left:-16px; top:10px; bottom:10px; width:3px; border-radius:0 3px 3px 0; background: var(--accent); }
-.nav .ico { width: 18px; text-align: center; font-size: 15px; }
+.nav .ico { width: 20px; display: inline-flex; justify-content: center; }
+
+/* ---------- Google Material Symbols ---------- */
+.msym {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal; font-style: normal; line-height: 1;
+  letter-spacing: normal; text-transform: none; white-space: nowrap;
+  word-wrap: normal; direction: ltr; display: inline-flex;
+  align-items: center; justify-content: center; vertical-align: middle;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  user-select: none; flex-shrink: 0;
+}
+/* icon sitting inside a coloured chip / avatar circle */
+.iconwrap {
+  width: 38px; height: 38px; border-radius: 11px; display: inline-flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.iconwrap.pink  { background: var(--accent-soft); color: var(--accent); }
+.iconwrap.green { background: var(--green-soft); color: var(--green); }
+.iconwrap.amber { background: var(--amber-soft); color: var(--amber); }
+.iconwrap.blue  { background: var(--blue-soft);  color: var(--blue); }
+.iconwrap.grey  { background: var(--surface-2);  color: var(--muted); }
+/* a row header with an icon + text */
+.hd-ico { display: flex; align-items: center; gap: 9px; }
+.brand-logo {
+  width: 30px; height: 30px; border-radius: 9px; background: var(--accent);
+  color: #fff; display: inline-flex; align-items: center; justify-content: center;
+}
+/* buttons that contain a Material icon */
+button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btnrow { align-items: center; }
+.iconbtn {
+  background: transparent; border: 1px solid transparent; color: var(--muted);
+  width: 32px; height: 32px; border-radius: 9px; padding: 0; cursor: pointer;
+}
+.iconbtn:hover { background: var(--surface-2); color: var(--text); }
+.iconbtn.danger:hover { background: var(--red-soft); color: var(--red); }
+/* segmented toggle */
+.segmented { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 4px; gap: 4px; }
+.segmented .seg { background: transparent; border: none; color: var(--muted); padding: 8px 16px; border-radius: 9px; font-weight: 600; cursor: pointer; }
+.segmented .seg.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+/* rack layout editor */
+.rack-card .unit { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin: 10px 0; background: var(--surface-2); }
+.unit-head { display: flex; align-items: center; gap: 8px; }
+.unit-head .nm { font-weight: 600; flex: 1; }
+.port { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px dashed var(--border); }
+.port .pinfo { flex: 1; }
+.port .ptag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+.port .ptag.intake { background: var(--blue-soft); color: var(--blue); }
+.port .ptag.exhaust { background: var(--accent-soft); color: var(--accent); }
+.assign-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 0; }
+.assign-form select { min-width: 150px; }
 .sidebar .userbox { padding: 14px 10px 2px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .sidebar .userbox b { color: var(--text); display: block; font-size: 13px; }
 

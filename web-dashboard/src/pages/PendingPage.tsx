@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../auth";
+import Icon from "../components/Icon";
 
 export default function PendingPage() {
   const { profile, refreshMe, signOut } = useAuth();
@@ -14,7 +15,7 @@ export default function PendingPage() {
   return (
     <div className="auth-wrap">
       <div className="auth-card" style={{ textAlign: "center" }}>
-        <h2>⏳ Waiting for approval</h2>
+        <h2 className="hd-ico" style={{ justifyContent: "center" }}><Icon name="hourglass_top" size={22} /> Waiting for approval</h2>
         <p className="muted">
           Your request to join has been sent to the organization admin. You'll get
           access (and any alerts the admin enables) once it's approved.

@@ -92,5 +92,53 @@ export const api = {
   createApiKey: (label: string) =>
     req("/v1/apikeys", { method: "POST", body: { label } }),
   apiKeys: () => req("/v1/apikeys"),
+
+  // topology (rack -> unit -> port)
   topology: () => req("/v1/topology"),
+  putTopology: (topology: unknown) =>
+    req("/v1/topology", { method: "PUT", body: { topology } }),
+
+  // commissioned-device roster (membership + friendly name)
+  devices: () => req("/v1/devices"),
+  putDevices: (devices: unknown[]) =>
+    req("/v1/devices", { method: "PUT", body: { devices } }),
+  deleteDevice: (eui: string) =>
+    req(`/v1/devices/${encodeURIComponent(eui)}`, { method: "DELETE" }),
+
+  // tenant settings (alert granularity + collection interval)
+  settings: () => req("/v1/settings"),
+  putSettings: (b: Record<string, unknown>) =>
+    req("/v1/settings", { method: "PUT", body: b }),
+
+  // environmental data (router/gateway BME) + firmware crash reports
+  envCurrent: () => req("/v1/env/current"),
+  envProbes: () => req("/v1/env/probes"),
+  crashes: () => req("/v1/crashes"),
 };
+
+/** Fetch an authenticated CSV export and trigger a browser download. The export
+ *  endpoints require the bearer JWT, so a plain <a href> won't work. */
+export async function downloadCsv(path: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (_token) headers["Authorization"] = `Bearer ${_token}`;
+  const res = await fetch(`${getBaseUrl()}${path}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Shared helper: short EUI-derived auto-name (Sensor-4EC0 / Router-16E0 …),
+ *  matching the Flutter app, used when a device has no custom name. */
+export function autoName(eui: string, kind = "sensor"): string {
+  const e = (eui || "").trim();
+  const suffix = (e.length >= 4 ? e.slice(-4) : e).toUpperCase();
+  const label = kind === "gateway" ? "Gateway" : kind === "router" ? "Router" : "Sensor";
+  return `${label}-${suffix}`;
+}

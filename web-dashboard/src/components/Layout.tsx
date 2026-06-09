@@ -1,13 +1,17 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth";
+import Icon from "./Icon";
 
 const items = [
-  { to: "/", label: "Dashboard", ico: "📊", end: true },
-  { to: "/visualization", label: "Visualization", ico: "🌀" },
-  { to: "/devices", label: "Devices", ico: "🖥️" },
-  { to: "/alerts", label: "Alerts & Thresholds", ico: "🔔" },
-  { to: "/members", label: "Members", ico: "👥" },
-  { to: "/settings", label: "Settings", ico: "⚙️" },
+  { to: "/", label: "Dashboard", icon: "dashboard", end: true },
+  { to: "/visualization", label: "Visualization", icon: "view_in_ar" },
+  { to: "/devices", label: "Devices", icon: "lan" },
+  { to: "/layout", label: "Rack Layout", icon: "view_module" },
+  { to: "/env", label: "Environment & Logs", icon: "monitoring" },
+  { to: "/alerts", label: "Alerts & Thresholds", icon: "notifications" },
+  { to: "/diagnostics", label: "Diagnostics", icon: "bug_report" },
+  { to: "/members", label: "Members", icon: "group" },
+  { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
 export default function Layout() {
@@ -16,13 +20,18 @@ export default function Layout() {
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">
-          <span className="dot" /> HVAC Monitor
+          <span className="brand-logo">
+            <Icon name="thermostat" size={20} fill />
+          </span>
+          HVAC Monitor
         </div>
         <div className="nav-group">Monitoring</div>
         <nav className="nav">
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end}>
-              <span className="ico">{it.ico}</span>
+              <span className="ico">
+                <Icon name={it.icon} size={20} />
+              </span>
               {it.label}
             </NavLink>
           ))}
@@ -32,7 +41,7 @@ export default function Layout() {
           {profile?.email} · {profile?.role}
           <div style={{ marginTop: 10 }}>
             <button className="secondary" style={{ width: "100%" }} onClick={signOut}>
-              Sign out
+              <Icon name="logout" size={17} /> Sign out
             </button>
           </div>
         </div>

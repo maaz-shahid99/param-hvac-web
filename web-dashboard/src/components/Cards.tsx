@@ -1,4 +1,9 @@
-export const STALE_SECONDS = 180;
+import Icon from "./Icon";
+
+// Cloud-only freshness window (no live BLE fallback here). Sensors forward ~every
+// 10s, so 60s = ~6 missed forwards: responsive (offline within ~70s incl. the 10s
+// poll) yet still tolerant of a brief Wi-Fi hiccup. Raise it if you see flicker.
+export const STALE_SECONDS = 60;
 
 export function nowSec() {
   return Date.now() / 1000;
@@ -48,10 +53,10 @@ export function tempSpinSeconds(t: number): number {
   return slow + (fast - slow) * k;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  high_temp: "🔥 High temperature",
-  delta: "↔ High ΔT",
-  stale: "📴 Sensor offline",
+const KIND_META: Record<string, { icon: string; label: string }> = {
+  high_temp: { icon: "local_fire_department", label: "High temperature" },
+  delta: { icon: "swap_horiz", label: "High ΔT" },
+  stale: { icon: "sensors_off", label: "Sensor offline" },
 };
 
 export function AlertsCard({
@@ -63,29 +68,31 @@ export function AlertsCard({
 }) {
   return (
     <div className="card">
-      <div className="hd">🔔 Open alerts</div>
+      <div className="hd hd-ico"><Icon name="notifications_active" size={18} fill /> Open alerts</div>
       {alerts.length === 0 ? (
         <div className="bd muted">No open alerts. All racks within limits.</div>
       ) : (
         alerts.map((a) => {
           const acked = a.state === "acked";
+          const meta = KIND_META[a.kind] || { icon: "warning", label: a.kind };
           const sub =
             a.kind === "stale"
               ? "Sensor stopped reporting"
               : `${(+a.value).toFixed(1)}°C (limit ${(+a.threshold).toFixed(1)}°C)`;
           return (
             <div className="row" key={a.id}>
-              <div>
-                <div>{a.location || "(unmapped)"}</div>
-                <div className="small muted">
-                  {KIND_LABEL[a.kind] || a.kind} · {sub}
+              <div className="btnrow">
+                <span className="iconwrap pink"><Icon name={meta.icon} size={20} /></span>
+                <div>
+                  <div>{a.location || "(unmapped)"}</div>
+                  <div className="small muted">{meta.label} · {sub}</div>
                 </div>
               </div>
               {acked ? (
                 <span className="badge grey">acked</span>
               ) : (
                 <button className="ghost" onClick={() => onAck(a.id)}>
-                  ACK
+                  <Icon name="check" size={16} /> ACK
                 </button>
               )}
             </div>
@@ -105,19 +112,22 @@ export function LiveTempsCard({
 }) {
   return (
     <div className="card">
-      <div className="hd">🌡️ Live temperatures</div>
+      <div className="hd hd-ico"><Icon name="thermostat" size={18} /> Live temperatures</div>
       {sensors.length === 0 ? (
         <div className="bd muted">No readings yet. Once the gateway posts, sensors appear here.</div>
       ) : (
-        sensors.map((s) => {
-          const maxc = +s.max_c;
+        sensors.map((s, i) => {
+          // Per-probe temperature when present (cloud /v1/current expands per probe);
+          // falls back to the sensor's hottest probe for legacy rows.
+          const temp = s.temp != null ? +s.temp : s.max_c != null ? +s.max_c : NaN;
+          const ok = Number.isFinite(temp);
           const t = nowSec() - +s.ts;
           const loc = s.location || s.eui;
           return (
-            <div className="row" key={s.eui}>
+            <div className="row" key={`${s.eui}-${s.rom || i}`}>
               <div className="btnrow">
-                <b style={{ color: maxc >= highLimit ? "var(--red)" : "var(--text)", minWidth: 56 }}>
-                  {maxc.toFixed(1)}°
+                <b style={{ color: ok && temp >= highLimit ? "var(--red)" : ok ? tempColor(temp) : "var(--faint)", minWidth: 56 }}>
+                  {ok ? `${temp.toFixed(1)}°` : "—"}
                 </b>
                 <div>
                   <div>{loc}</div>
@@ -125,7 +135,7 @@ export function LiveTempsCard({
                 </div>
               </div>
               <span className="small muted">
-                {ago(t)} · slot {s.slot}
+                {ago(t)}{s.slot ? ` · slot ${s.slot}` : ""}
               </span>
             </div>
           );

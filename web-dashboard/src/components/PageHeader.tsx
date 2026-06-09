@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import Icon from "./Icon";
 
 function NotificationBell() {
   const [count, setCount] = useState(0);
@@ -19,7 +20,7 @@ function NotificationBell() {
   }, []);
   return (
     <button className="bell" title="Alerts" onClick={() => nav("/alerts")}>
-      🔔
+      <Icon name={count > 0 ? "notifications_active" : "notifications"} size={20} fill={count > 0} />
       {count > 0 && <span className="bell-badge">{count}</span>}
     </button>
   );

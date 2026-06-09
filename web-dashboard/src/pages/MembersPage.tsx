@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
+import Icon from "../components/Icon";
 
 export default function MembersPage() {
   const { isAdmin, profile } = useAuth();
@@ -40,14 +41,14 @@ export default function MembersPage() {
   return (
     <>
       <PageHeader title="Members">
-        <button className="secondary" onClick={load}>Refresh</button>
+        <button className="secondary" onClick={load}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
       <div className="page">
         {err && <div className="error">{err}</div>}
 
         {isAdmin && (
           <div className="card">
-            <div className="hd">Organization code</div>
+            <div className="hd hd-ico"><Icon name="qr_code_2" size={18} /> Organization code</div>
             <div className="row">
               <span className="mono" style={{ fontSize: 18, letterSpacing: 2 }}>
                 {profile?.org_code || "—"}
@@ -58,7 +59,7 @@ export default function MembersPage() {
                   navigator.clipboard?.writeText(profile?.org_code || "");
                 }}
               >
-                Copy
+                <Icon name="content_copy" size={16} /> Copy
               </button>
             </div>
             <div className="bd small muted">Share this code so members can request to join.</div>
@@ -71,7 +72,7 @@ export default function MembersPage() {
           <>
             {isAdmin && pending.length > 0 && (
               <div className="card">
-                <div className="hd">Join requests ({pending.length})</div>
+                <div className="hd hd-ico"><Icon name="person_add" size={18} /> Join requests ({pending.length})</div>
                 {pending.map((m) => (
                   <div className="row" key={m.id}>
                     <div>
@@ -80,9 +81,9 @@ export default function MembersPage() {
                     </div>
                     <div className="btnrow">
                       <button className="secondary" onClick={() => guard(() => api.rejectMember(m.id))}>
-                        Reject
+                        <Icon name="close" size={16} /> Reject
                       </button>
-                      <button onClick={() => guard(() => api.approveMember(m.id))}>Approve</button>
+                      <button onClick={() => guard(() => api.approveMember(m.id))}><Icon name="check" size={16} /> Approve</button>
                     </div>
                   </div>
                 ))}
@@ -90,7 +91,7 @@ export default function MembersPage() {
             )}
 
             <div className="card">
-              <div className="hd">Members ({active.length})</div>
+              <div className="hd hd-ico"><Icon name="group" size={18} /> Members ({active.length})</div>
               {active.length === 0 && <div className="bd muted">No active members yet.</div>}
               {active.map((m) => (
                 <div className="row" key={m.id}>
