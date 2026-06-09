@@ -43,21 +43,31 @@ Serve `dist/` from any static host / Nginx. Then the browser calls the cloud
 e.g. `CORS_ORIGINS=https://app.yourdomain.com`, and point the app at the cloud
 URL (Settings, or `VITE_CLOUD_URL` at build time).
 
+## Pages
+Dashboard, Devices, **Rack Layout** (rack→unit→port + per-probe assignment),
+Alerts & Thresholds, **Environment & Logs** (router/gateway BME + every sensor
+probe, 60 s poll, CSV export), **Diagnostics** (firmware crash reports + CSV),
+Members, Settings (alert granularity + collection interval). Icons are Google
+**Material Symbols** (`src/components/Icon.tsx`).
+
 ## Roles (same model as the app)
-- **Member** — Dashboard, Devices, Alerts (view + ACK), Members (read-only),
-  Settings. No threshold editing, no member management.
+- **Member** — Dashboard, Devices, Rack Layout, Alerts (view + ACK), Environment
+  & Logs, Diagnostics, Members (read-only), Settings. No threshold editing, no
+  member management.
 - **Admin** — all of the above **plus** edit thresholds, manage members
   (approve/reject, email/SMS opt-in, org code), generate a gateway API key, set
-  recipients.
+  recipients, set the collection interval.
 
 Auth covers sign in, **create organization** (bootstrap token), **join by org
 code** (→ pending until an admin approves), and **password reset by emailed
 OTP** — all against the Cloud Server.
 
 ## Structure
-- `src/api.ts` — REST client (base URL + JWT).
+- `src/api.ts` — REST client (base URL + JWT) incl. `envCurrent`, `envProbes`,
+  `crashes`, and `downloadCsv()` (authenticated blob download).
 - `src/auth.tsx` — `AuthProvider`/`useAuth` (session, role/status, persistence).
 - `src/App.tsx` — auth gate + routes; `src/components/Layout.tsx` — sidebar.
-- `src/pages/*` — Login, Pending, Dashboard, Devices, Alerts & Thresholds,
-  Members, Settings.
-- `src/components/Cards.tsx` — shared Alerts / Live-temps cards + helpers.
+- `src/pages/*` — Login, Pending, Dashboard, Devices, RackLayout, Alerts &
+  Thresholds, **EnvDataPage**, **DiagnosticsPage**, Members, Settings.
+- `src/components/Cards.tsx` — shared Alerts / Live-temps cards + helpers;
+  `src/components/Icon.tsx` — Material Symbols wrapper.
