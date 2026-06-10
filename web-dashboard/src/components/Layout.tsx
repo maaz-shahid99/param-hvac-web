@@ -9,13 +9,15 @@ const items = [
   { to: "/layout", label: "Rack Layout", icon: "view_module" },
   { to: "/env", label: "Environment & Logs", icon: "monitoring" },
   { to: "/alerts", label: "Alerts & Thresholds", icon: "notifications" },
-  { to: "/diagnostics", label: "Diagnostics", icon: "bug_report" },
+  { to: "/diagnostics", label: "Diagnostics", icon: "bug_report", adminOnly: true },
   { to: "/members", label: "Members", icon: "group" },
   { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
 export default function Layout() {
   const { profile, signOut } = useAuth();
+  const isAdmin = profile?.role === "admin";
+  const navItems = items.filter((it) => !it.adminOnly || isAdmin);
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -27,7 +29,7 @@ export default function Layout() {
         </div>
         <div className="nav-group">Monitoring</div>
         <nav className="nav">
-          {items.map((it) => (
+          {navItems.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end}>
               <span className="ico">
                 <Icon name={it.icon} size={20} />
