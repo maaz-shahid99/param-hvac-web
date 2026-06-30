@@ -3,7 +3,7 @@
 The browser frontends for the HVAC monitoring system. Two independent React + Vite
 (TypeScript) apps that both talk to the Cloud Server (`hvac-server`).
 
-> **Integration contract:** see the backend [PROTOCOL.md](https://github.com/YOUR-ORG/hvac-server/blob/main/PROTOCOL.md)
+> **Integration contract:** see the backend [PROTOCOL.md](https://github.com/maaz-shahid99/param-hvac-server/blob/main/PROTOCOL.md)
 > for API endpoints, auth, and ports.
 
 ## Apps
@@ -22,6 +22,6 @@ Point at a non-local backend with `VITE_CLOUD_URL` at build time, or override at
 in `localStorage` (`cloud_base_url` for web-dashboard, `fc_base` + `fc_token` for field-console).
 
 ## Sibling repos
-- Backend: https://github.com/YOUR-ORG/hvac-server
-- App: https://github.com/YOUR-ORG/hvac-mobile
-- Firmware: https://github.com/YOUR-ORG/hvac-firmware
+- Backend: https://github.com/maaz-shahid99/param-hvac-server
+- App: https://github.com/maaz-shahid99/param-hvac-mobile
+- Firmware: https://github.com/maaz-shahid99/param-hvac-firmware
