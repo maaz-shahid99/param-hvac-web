@@ -4,7 +4,7 @@ A standalone web console for **servicing a deployed appliance over the LAN** whe
 you (the manufacturer) have **no customer account and no server login**. It
 authenticates with the appliance's shared **support token** (`X-Support-Token`)
 and lets you pull fleet diagnostics and publish tiered firmware — separate from
-the customer-facing [web-dashboard](../web-dashboard/) and [app](../thread_commissioner/).
+the customer-facing [web-dashboard](../web-dashboard/) and [app](https://github.com/YOUR-ORG/hvac-mobile).
 
 > Distinct audience + auth: the dashboard/app use a customer JWT; this console uses
 > the manufacturer `SUPPORT_TOKEN`. Keep it internal.

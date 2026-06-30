@@ -1,6 +1,6 @@
 # HVAC Monitor — web dashboard (React)
 
-A browser dashboard for the [Cloud Server](../Cloud%20Server/), for **admins and
+A browser dashboard for the [Cloud Server](https://github.com/YOUR-ORG/hvac-server), for **admins and
 members**. It's the cloud half of the product (login, alerts, thresholds, live
 temps, devices, member management) — Bluetooth commissioning stays in the phone
 app (`../thread_commissioner/`), since you provision hardware standing next to it.
