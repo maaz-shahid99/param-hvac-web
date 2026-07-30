@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth";
 import Icon from "./Icon";
+import OtaBanner from "./OtaBanner";
 
 const items = [
   { to: "/", label: "Dashboard", icon: "dashboard", end: true },
@@ -49,6 +50,9 @@ export default function Layout() {
         </div>
       </aside>
       <main className="content">
+        {/* Mounted at the shell level so a pending optional update is visible on
+            every page, not just the dashboard. Self-hides when there's none. */}
+        <OtaBanner />
         <Outlet />
       </main>
     </div>

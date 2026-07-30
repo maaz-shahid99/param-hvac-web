@@ -218,6 +218,20 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .auth-card .sub { color: var(--muted); margin-bottom: 18px; }
 .auth-card .switch { text-align: center; margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
 .error { background: var(--red-soft); border: 1px solid rgba(239,62,84,.25); color: #c2304a; padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 13px; }
+
+/* Optional-firmware-update banner (components/OtaBanner.tsx). Informational, so
+   it uses the blue accent rather than the red reserved for alerts. */
+.ota-wrap { margin-bottom: 16px; }
+.ota-banner {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--blue-soft); border: 1px solid rgba(47,109,246,.22);
+  border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 10px;
+}
+.ota-banner .ota-ico { display: flex; color: var(--blue); flex: 0 0 auto; }
+.ota-banner .ota-txt { flex: 1 1 auto; min-width: 0; }
+.ota-banner .ota-txt b { font-size: 14px; }
+.ota-banner .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.ota-banner button { flex: 0 0 auto; }
 .toggle { display: flex; gap: 8px; align-items: center; }
 .switchbtn { width: 42px; height: 24px; border-radius: 999px; background: var(--border-strong); position: relative; cursor: pointer; transition: background .18s; }
 .switchbtn.on { background: var(--green); }

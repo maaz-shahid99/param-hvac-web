@@ -114,6 +114,13 @@ export const api = {
   envCurrent: () => req("/v1/env/current"),
   envProbes: () => req("/v1/env/probes"),
   crashes: () => req("/v1/crashes"),
+
+  // firmware OTA (customer side). `available` lists only OPTIONAL builds newer
+  // than the fleet's current firmware — mandatory ones auto-apply and are never
+  // listed. Approving one lets the gateway pick it up on its next OTA poll.
+  otaAvailable: () => req("/v1/ota/available"),
+  approveOta: (kind: string, version: number) =>
+    req("/v1/ota/approve", { method: "POST", body: { kind, version } }),
 };
 
 /** Fetch an authenticated CSV export and trigger a browser download. The export
