@@ -368,7 +368,11 @@ export default function AlertsThresholdsPage() {
           </div>
         </div>
 
-        <LiveTempsCard sensors={sensors} highLimit={effHigh} wide />
+        {/* Scoped to what the limit above actually affects. This was the full
+            16-row table — the identical component the dashboard rendered and
+            Environment & Logs renders again. Here the useful question is "what
+            is close to the number I'm editing", not "list every probe". */}
+        <LiveTempsCard sensors={sensors} highLimit={effHigh} nearOnly />
       </div>
     </>
   );

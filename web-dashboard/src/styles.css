@@ -256,6 +256,9 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
   box-shadow: 0 12px 30px rgba(200,16,46,.30); animation: popIn .3s ease both;
 }
 .hero.calm { background: linear-gradient(135deg, #0f6b3a, #17a45a); box-shadow: 0 12px 30px rgba(15,107,58,.25); }
+/* Between alarming and all-clear: nothing has crossed a limit, but something
+   still wants a look. Amber rather than green so it doesn't read as "fine". */
+.hero.watch { background: linear-gradient(135deg, #8a5a12, #c0871f); box-shadow: 0 12px 30px rgba(138,90,18,.25); }
 .hero h3 { margin: 0 0 4px; font-size: 18px; font-weight: 750; }
 /* Opacity on small text over a saturated fill is what pushed the location and
    readings below 3.5:1 — keep them at full strength. */

@@ -283,24 +283,230 @@ export function AlertsCard({
   );
 }
 
+/** A reading counts as "closing in" at 75% of its limit — the same point the
+ *  deltaColor ramp turns amber, so the wording and the colour agree. */
+export const NEAR_LIMIT = 0.75;
+
+/**
+ * ΔT per unit, derived from a /v1/current response alone.
+ *
+ * Groups by the "Rack / Unit" prefix of each row's location and splits on slot
+ * (A = intake, B = exhaust, set from the port type at topology-save time), then
+ * reduces each side by MAX — the same shape as thresholds._evaluate_delta, so
+ * this can't disagree with what actually alerted. Saves the callers a second
+ * topology fetch just to pair two probes that already carry their own labels.
+ */
+export function unitDeltas(sensors: any[]): { unit: string; intake: number; exhaust: number; delta: number }[] {
+  const units: Record<string, { a?: number; b?: number }> = {};
+  for (const s of sensors || []) {
+    const loc = String(s.location || "");
+    const parts = loc.split("/").map((x) => x.trim());
+    if (parts.length < 2) continue;                 // unmapped row — no unit to pair on
+    if (!isOnline(+s.ts)) continue;
+    const temp = s.temp != null ? +s.temp : NaN;
+    if (!Number.isFinite(temp)) continue;
+    const key = parts.slice(0, 2).join(" / ");
+    const u = (units[key] ||= {});
+    const side = s.slot === "B" ? "b" : "a";
+    if (u[side] === undefined || temp > (u[side] as number)) u[side] = temp;
+  }
+  return Object.entries(units)
+    .filter(([, u]) => u.a !== undefined && u.b !== undefined)
+    .map(([unit, u]) => ({ unit, intake: u.a as number, exhaust: u.b as number, delta: (u.b as number) - (u.a as number) }))
+    .sort((x, y) => y.delta - x.delta);
+}
+
+/**
+ * What needs attention right now — and nothing else.
+ *
+ * This replaced a full 16-row reading table on the dashboard. That table was
+ * the same data the thermal map beside it already showed, and repeating an
+ * inventory is the wrong job for a dashboard anyway: the question is "is
+ * anything wrong", not "list everything". Every row here is something a person
+ * would act on; when there is nothing, it says so explicitly rather than
+ * rendering an empty box that reads as a load failure.
+ */
+export type AttentionItem = {
+  key: string; icon: string; tone: string; title: string; sub: string; value: string;
+};
+
+export type AttentionInput = {
+  sensors: any[];
+  highLimit: number;
+  deltaLimit: number;
+  /** Commissioned nodes that aren't reporting. */
+  darkNodes?: { eui: string; label: string; reason: string }[];
+};
+
+/** Exported so the hero can agree with the card. Rendering "All clear" above a
+ *  list of three things that need attention is the kind of contradiction this
+ *  whole dashboard has been getting fixed for. */
+export function attentionItems({
+  sensors,
+  highLimit,
+  deltaLimit,
+  darkNodes = [],
+}: AttentionInput): AttentionItem[] {
+  const items: AttentionItem[] = [];
+  type Item = AttentionItem;
+
+  const hotNear = highLimit * NEAR_LIMIT;
+  const readings = (sensors || [])
+    .map((s) => ({
+      s,
+      temp: s.temp != null ? +s.temp : s.max_c != null ? +s.max_c : NaN,
+      online: isOnline(+s.ts),
+    }))
+    .filter((r) => Number.isFinite(r.temp));
+
+  for (const r of readings.filter((r) => r.online && r.temp >= hotNear).sort((a, b) => b.temp - a.temp)) {
+    const over = r.temp >= highLimit;
+    items.push({
+      key: `t:${r.s.eui}:${r.s.rom || ""}`,
+      icon: over ? "local_fire_department" : "thermostat",
+      tone: over ? "pink" : "amber",
+      title: r.s.location || r.s.eui,
+      sub: over ? `over the ${highLimit}° limit` : `within ${(100 - NEAR_LIMIT * 100).toFixed(0)}% of the ${highLimit}° limit`,
+      value: `${r.temp.toFixed(1)}°`,
+    });
+  }
+
+  for (const u of unitDeltas(sensors).filter((u) => u.delta >= deltaLimit * NEAR_LIMIT)) {
+    const over = u.delta >= deltaLimit;
+    items.push({
+      key: `d:${u.unit}`,
+      icon: "swap_horiz",
+      tone: over ? "pink" : "amber",
+      title: u.unit,
+      sub: over ? `ΔT over the ${deltaLimit}° limit` : `ΔT closing on the ${deltaLimit}° limit`,
+      value: `+${u.delta.toFixed(1)}`,
+    });
+  }
+
+  // A probe that was mapped and has now gone quiet is a fault, not an absence.
+  for (const r of readings.filter((r) => !r.online && r.s.location)) {
+    items.push({
+      key: `s:${r.s.eui}:${r.s.rom || ""}`,
+      icon: "sensors_off",
+      tone: "grey",
+      title: r.s.location,
+      sub: `stopped reporting · ${Number.isFinite(nowSec() - +r.s.ts) ? ago(nowSec() - +r.s.ts) : "no timestamp"}`,
+      value: "—",
+    });
+  }
+
+  for (const n of darkNodes) {
+    items.push({ key: `n:${n.eui}`, icon: "sensors_off", tone: "grey", title: n.label, sub: n.reason, value: "—" });
+  }
+
+  return items;
+}
+
+export function AttentionCard(props: AttentionInput) {
+  const { sensors, highLimit } = props;
+  const items = attentionItems(props);
+  const hotNear = highLimit * NEAR_LIMIT;
+  const readings = (sensors || [])
+    .map((s) => ({ temp: s.temp != null ? +s.temp : s.max_c != null ? +s.max_c : NaN, online: isOnline(+s.ts), s }))
+    .filter((r) => Number.isFinite(r.temp));
+  const online = readings.filter((r) => r.online);
+  const hottest = online.reduce((m, r) => (r.temp > m ? r.temp : m), -Infinity);
+  const hottestAt = online.find((r) => r.temp === hottest)?.s?.location;
+  const calm = online.filter((r) => r.temp < hotNear).length;
+
+  return (
+    <div className="card">
+      <div className="hd hd-ico">
+        <Icon name={items.length ? "priority_high" : "task_alt"} size={18} /> Needs attention
+        {items.length > 0 && <span className="badge red">{items.length}</span>}
+      </div>
+      {items.length === 0 ? (
+        <div className="bd">
+          <div className="hd-ico" style={{ color: "var(--green)", fontWeight: 600 }}>
+            <Icon name="check_circle" size={18} fill /> All {online.length} probes within limits
+          </div>
+          {Number.isFinite(hottest) && (
+            <div className="small muted" style={{ marginTop: 6 }}>
+              Hottest {hottest.toFixed(1)}°{hottestAt ? ` at ${hottestAt}` : ""} · limit {highLimit}°
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {items.map((it) => (
+            <div className="row" key={it.key}>
+              <div className="btnrow">
+                <span className={`iconwrap ${it.tone}`}><Icon name={it.icon} size={20} /></span>
+                <div>
+                  <div>{it.title}</div>
+                  <div className="small muted">{it.sub}</div>
+                </div>
+              </div>
+              <b>{it.value}</b>
+            </div>
+          ))}
+          <div className="bd small muted">
+            {calm} other probe{calm === 1 ? "" : "s"} within limits.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function LiveTempsCard({
   sensors,
   highLimit,
   wide,
+  nearOnly,
 }: {
   sensors: any[];
   highLimit: number;
   /** Span the full row inside a `.page.cols` grid — the reading rows are long
    *  (location + EUI + age + slot) and wrap badly in a 420px column. */
   wide?: boolean;
+  /** Show only readings at or above NEAR_LIMIT of `highLimit`. Used where the
+   *  point is to explain the threshold being edited rather than to inventory
+   *  every probe — the full table lives on Environment & Logs. */
+  nearOnly?: boolean;
 }) {
+  const near = highLimit * NEAR_LIMIT;
+  const all = sensors || [];
+  const shown = nearOnly
+    ? all
+        .filter((s) => {
+          const t = s.temp != null ? +s.temp : s.max_c != null ? +s.max_c : NaN;
+          return Number.isFinite(t) && isOnline(+s.ts) && t >= near;
+        })
+        .sort((a, b) => (+b.temp || +b.max_c || 0) - (+a.temp || +a.max_c || 0))
+    : all;
+  const hottest = all.reduce((m, s) => {
+    const t = s.temp != null ? +s.temp : s.max_c != null ? +s.max_c : NaN;
+    return Number.isFinite(t) && isOnline(+s.ts) && t > m ? t : m;
+  }, -Infinity);
+
+  if (nearOnly && shown.length === 0) {
+    return (
+      <div className={`card${wide ? " wide" : ""}`}>
+        <div className="hd hd-ico"><Icon name="thermostat" size={18} /> Closest to the limit</div>
+        <div className="bd muted">
+          {Number.isFinite(hottest)
+            ? `Nothing within ${(100 - NEAR_LIMIT * 100).toFixed(0)}% of the ${highLimit}° limit — hottest probe is ${hottest.toFixed(1)}°.`
+            : "No readings yet."}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`card${wide ? " wide listcard" : ""}`}>
-      <div className="hd hd-ico"><Icon name="thermostat" size={18} /> Live temperatures</div>
-      {sensors.length === 0 ? (
+      <div className="hd hd-ico">
+        <Icon name="thermostat" size={18} /> {nearOnly ? "Closest to the limit" : "Live temperatures"}
+      </div>
+      {shown.length === 0 ? (
         <div className="bd muted">No readings yet. Once the gateway posts, sensors appear here.</div>
       ) : (
-        sensors.map((s, i) => {
+        shown.map((s, i) => {
           // Per-probe temperature when present (cloud /v1/current expands per probe);
           // falls back to the sensor's hottest probe for legacy rows.
           const temp = s.temp != null ? +s.temp : s.max_c != null ? +s.max_c : NaN;
@@ -327,6 +533,14 @@ export function LiveTempsCard({
             </div>
           );
         })
+      )}
+      {/* Say what was filtered out. A shortened list that doesn't admit it is
+          shortened reads as the complete picture. */}
+      {nearOnly && shown.length > 0 && all.length > shown.length && (
+        <div className="bd small muted">
+          {all.length - shown.length} other probe{all.length - shown.length === 1 ? "" : "s"} further from
+          the limit — full table on Environment &amp; Logs.
+        </div>
       )}
     </div>
   );

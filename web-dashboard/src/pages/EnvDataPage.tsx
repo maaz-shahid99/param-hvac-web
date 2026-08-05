@@ -106,7 +106,16 @@ export default function EnvDataPage() {
             — most of the page was empty next to a single row. */}
         <div className="card wide listcard">
           <div className="hd hd-ico" style={{ justifyContent: "space-between" }}>
-            <span className="hd-ico"><Icon name="thermostat" size={18} /> Sensors — temperatures ({sensors.length})</span>
+            <span className="hd-ico">
+              <Icon name="thermostat" size={18} /> Sensors — temperatures ({sensors.length})
+              {/* Surfaced in the header because this is the only page that can
+                  report it — an unassigned probe is invisible everywhere else. */}
+              {sensors.some((s: any) => !s.location) && (
+                <span className="badge grey" title="Probes reporting but not assigned to a rack port">
+                  {sensors.filter((s: any) => !s.location).length} unassigned
+                </span>
+              )}
+            </span>
             <button className="secondary" disabled={busy} onClick={() => dl("/v1/readings/export.csv", "sensors.csv")}>
               <Icon name="download" size={16} /> CSV
             </button>
@@ -118,12 +127,30 @@ export default function EnvDataPage() {
           ) : sensors.map((s: any, i: number) => {
             const t = s.temp != null ? +s.temp : NaN;
             const name = (s.name || autoName(s.eui)).toString();
+            // The server sends location="" for a probe that exists on the bus
+            // but isn't assigned to any port. This page is the ONLY one that can
+            // show those: /v1/current is built from the port mapping, so an
+            // unassigned probe is absent from every other view — and nothing
+            // alerts on it either, since the watchdog walks SensorMap.
+            const unassigned = !s.location;
             return (
               <div className="row" key={`${s.eui}-${s.rom || i}`}>
                 <div className="btnrow">
-                  <span className="iconwrap amber"><Icon name="thermostat" size={20} /></span>
+                  <span className={`iconwrap ${unassigned ? "grey" : "amber"}`}>
+                    <Icon name="thermostat" size={20} />
+                  </span>
                   <div>
-                    <div>{s.label || s.eui}</div>
+                    <div className="hd-ico">
+                      {s.label || s.eui}
+                      {unassigned && (
+                        <span
+                          className="badge grey"
+                          title="This probe is reporting but isn't assigned to a rack port, so it has no location, appears nowhere else, and no alert can fire for it. Assign it under Rack Layout."
+                        >
+                          unassigned
+                        </span>
+                      )}
+                    </div>
                     <div className="small muted">{name}{s.ts ? ` · ${ago(nowSec() - +s.ts)}` : ""}</div>
                   </div>
                 </div>
