@@ -14,69 +14,84 @@ import {
 } from "./Cards";
 
 /**
- * Live thermal map: one row per rack unit, columns intake / exhaust / ΔT.
+ * Live thermal map, drawn as a dumbbell chart.
  *
- * Built from the TOPOLOGY rather than from the readings, which is the whole
- * point — /v1/current only contains probes that have data, so a port nobody has
- * wired up yet is simply absent from it. Driving the rows off the topology makes
- * those gaps visible instead of invisible, which is exactly the class of blind
- * spot that let "16 / 16 · all reporting" render while a node sat dark.
+ * Every unit sits on ONE shared temperature axis: a filled dot for intake, a
+ * hollow dot for exhaust, and the bar between them IS the ΔT. That choice is
+ * doing three jobs the previous In/Out/ΔT table did badly:
+ *
+ *  - ΔT is a gap, so drawing it as a gap needs no explaining. (The dataviz rule
+ *    of thumb: dumbbell when the size of each gap is the point.)
+ *  - A unit whose intake isn't assigned is simply a single dot rather than two
+ *    empty cells and a dash — it stops looking like broken UI and stays
+ *    comparable against everything else.
+ *  - Both racks share the axis, so it's obvious at a glance that Rack/Unit 2 at
+ *    51.6 is as hot as Table/Unit 4 at 52.2. The table put them in separate
+ *    blocks where nothing could be compared.
+ *
+ * Rows come from the TOPOLOGY, not the readings: /v1/current only contains
+ * probes that have data, so a port nobody has wired up is absent from it
+ * entirely — the same blind spot that let "16 / 16 · all reporting" render
+ * while a whole node sat dark.
  */
 
-type Cell = {
-  assigned: boolean;
-  eui: string;
-  rom: string;
-  temp: number | null;
-  ts: number;
-  online: boolean;
-  port: string;
-};
+// ASHRAE TC9.9 recommends server inlet air at 18-27 °C. Worth flagging, because
+// an intake already at the ceiling is why the exhaust ends up where it does.
+const ASHRAE_INTAKE_MAX = 27;
 
-type UnitRow = {
+type Side = { eui: string; rom: string; temp: number | null; ts: number; online: boolean; port: string } | null;
+
+type Row = {
   key: string;
   rack: string;
   unit: string;
-  intake: Cell | null;
-  exhaust: Cell | null;
+  label: string;
+  intake: Side;
+  exhaust: Side;
   delta: number | null;
   euis: string[];
-  unassigned: number;
 };
 
-// Distinct hues for the (few) sensor nodes on a site. Assigned by sorted EUI so
-// a node keeps its colour across reloads.
 const NODE_COLORS = ["#4f7fd0", "#c25fb0", "#3f9f8f", "#d08a3a", "#7a6fd0", "#c0554f"];
 
-/** Pick readable text for a swatch — the amber band of the ramp is bright enough
- *  that white-on-amber fails contrast, so this can't be hardcoded. */
-function inkFor(rgb: string): string {
-  const m = rgb.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (!m) return "#fff";
-  const [r, g, b] = [+m[1], +m[2], +m[3]];
-  return 0.299 * r + 0.587 * g + 0.114 * b > 165 ? "#1a1d26" : "#fff";
+/** Round tick values that sit inside [lo, hi] — a plain lo/mid/hi axis prints
+ *  things like "26.8°" which nobody can read a position against. */
+function niceTicks(lo: number, hi: number, want = 4): number[] {
+  const span = hi - lo;
+  if (!(span > 0)) return [lo];
+  const raw = span / want;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  let step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
+  const build = (s: number) => {
+    const out: number[] = [];
+    for (let v = Math.ceil(lo / s) * s; v <= hi + 1e-9; v += s) out.push(Math.round(v * 10) / 10);
+    return out;
+  };
+  let out = build(step);
+  // Rounding up to a nice step can leave only one or two labels on the axis,
+  // which is not enough to read a dot's position against. Halve until it is.
+  while (out.length < 3 && step > 0.5) {
+    step /= 2;
+    out = build(step);
+  }
+  return out;
 }
 
 export default function ThermalMap() {
-  const [rows, setRows] = useState<UnitRow[]>([]);
-  const [high, setHigh] = useState(40);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [high, setHigh] = useState(70);
   const [limit, setLimit] = useState(30);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   async function refresh() {
     try {
-      const [topo, cur, th] = await Promise.all([
-        api.topology(),
-        api.current(),
-        api.thresholds(),
-      ]);
+      const [topo, cur, th] = await Promise.all([api.topology(), api.current(), api.thresholds()]);
       setHigh(tenantHighLimit(th));
       const tenant = (th?.thresholds || []).find((x: any) => x?.scope === "tenant");
       const d = Number(tenant?.delta_c ?? th?.defaults?.delta_c);
       setLimit(Number.isFinite(d) ? d : 30);
 
-      // readings: exact probe first, sensor-hottest as the legacy fallback
       const byKey: Record<string, { temp: number; ts: number }> = {};
       for (const s of cur.sensors || []) {
         const eui = String(s.eui).toLowerCase();
@@ -85,24 +100,20 @@ export default function ThermalMap() {
         if (!prev || ts >= prev.ts) byKey[eui] = { temp: Number(s.max_c), ts };
         if (s.rom) {
           byKey[`${eui}:${String(s.rom).toLowerCase()}`] = {
-            temp: s.temp != null ? Number(s.temp) : NaN,
-            ts,
+            temp: s.temp != null ? Number(s.temp) : NaN, ts,
           };
         }
       }
 
-      const out: UnitRow[] = [];
+      const out: Row[] = [];
       for (const rack of topo.topology?.racks || []) {
         for (const u of rack.units || []) {
           const ports = u.ports || [];
           const euis = new Set<string>();
-          let unassigned = 0;
 
-          const side = (want: 0 | 1): Cell | null => {
-            const mine = ports.filter((p: any) => portRank(p.type || p.label) === want);
-            if (mine.length === 0) return null;
-            let best: Cell | null = null;
-            for (const p of mine) {
+          const side = (want: 0 | 1): Side => {
+            let best: Side = null;
+            for (const p of ports.filter((p: any) => portRank(p.type || p.label) === want)) {
               const eui = (p.assignedEui || "").toLowerCase();
               const rom = (p.assignedProbeRom || "").toLowerCase();
               if (!eui) continue;
@@ -110,41 +121,31 @@ export default function ThermalMap() {
               const r = rom ? byKey[`${eui}:${rom}`] : byKey[eui];
               const temp = r && Number.isFinite(r.temp) ? r.temp : null;
               const online = !!r && isOnline(r.ts) && temp != null;
-              const cell: Cell = {
-                assigned: true, eui, rom, temp, ts: r?.ts ?? 0, online,
-                port: p.label || (want ? "Exhaust" : "Intake"),
-              };
-              // Hottest wins, mirroring thresholds._hottest so this agrees with
-              // whatever the alert engine decided for the same unit.
+              const cell = { eui, rom, temp, ts: r?.ts ?? 0, online, port: p.label || (want ? "Exhaust" : "Intake") };
+              // Hottest wins, mirroring thresholds._hottest so the picture and
+              // the alarm can't disagree about the same unit.
               if (!best) best = cell;
               else if (cell.online && (!best.online || (cell.temp ?? -Infinity) > (best.temp ?? -Infinity))) best = cell;
-            }
-            if (!best) {
-              unassigned += mine.length;
-              return { assigned: false, eui: "", rom: "", temp: null, ts: 0, online: false,
-                       port: mine[0]?.label || (want ? "Exhaust" : "Intake") };
             }
             return best;
           };
 
           const intake = side(0);
           const exhaust = side(1);
-          const delta =
-            intake?.online && exhaust?.online && intake.temp != null && exhaust.temp != null
-              ? exhaust.temp - intake.temp
-              : null;
-
           out.push({
             key: `${rack.id}:${u.id}`,
             rack: rack.name || "Rack",
             unit: u.name || "Unit",
-            intake, exhaust, delta,
+            label: `${rack.name || "Rack"} ${(u.name || "Unit").replace(/^unit\s*/i, "U")}`,
+            intake, exhaust,
+            delta:
+              intake?.online && exhaust?.online && intake.temp != null && exhaust.temp != null
+                ? exhaust.temp - intake.temp
+                : null,
             euis: [...euis],
-            unassigned,
           });
         }
       }
-      out.sort((a, b) => naturalCompare(a.rack, b.rack) || naturalCompare(a.unit, b.unit));
       setRows(out);
       setErr(null);
     } catch (e: any) {
@@ -158,49 +159,105 @@ export default function ThermalMap() {
 
   const allEuis = [...new Set(rows.flatMap((r) => r.euis))].sort();
   const nodeColor = (eui: string) => NODE_COLORS[allEuis.indexOf(eui) % NODE_COLORS.length];
-  const withDelta = rows.filter((r) => r.delta != null).length;
-  const gaps = rows.reduce((n, r) => n + r.unassigned, 0);
 
-  function cellView(c: Cell | null) {
-    if (!c) return <span className="hm-cell none" title="no port of this type on this unit">–</span>;
-    if (!c.assigned) {
-      return (
-        <span className="hm-cell unassigned" title={`${c.port} — no sensor assigned to this port yet`}>
-          ·
-        </span>
-      );
-    }
-    if (!c.online) {
-      return (
-        <span
-          className="hm-cell offline"
-          title={`${c.port} · ${autoName(c.eui)}\n${c.ts ? `last reading ${ago(nowSec() - c.ts)}` : "no reading yet"}`}
-        >
-          —
-        </span>
-      );
-    }
-    const t = c.temp as number;
-    const bg = tempColor(t);
+  // Three groups, because they answer different questions: units with a real
+  // rise, units we can only see one side of, and units we can't see at all.
+  const paired = rows.filter((r) => r.delta != null).sort((a, b) => (b.delta as number) - (a.delta as number));
+  const single = rows
+    .filter((r) => r.delta == null && (r.intake?.online || r.exhaust?.online))
+    .sort((a, b) => {
+      const t = (r: Row) => (r.exhaust?.online ? (r.exhaust.temp as number) : (r.intake?.temp as number)) ?? -Infinity;
+      return t(b) - t(a);
+    });
+  const dark = rows.filter((r) => r.delta == null && !r.intake?.online && !r.exhaust?.online);
+
+  const temps = [...paired, ...single].flatMap((r) =>
+    [r.intake?.online ? r.intake.temp : null, r.exhaust?.online ? r.exhaust.temp : null].filter(
+      (v): v is number => v != null
+    )
+  );
+  const lo = temps.length ? Math.min(...temps) : 20;
+  const hi = temps.length ? Math.max(...temps) : 50;
+  const pad = Math.max(1.5, (hi - lo) * 0.1);
+  const dMin = lo - pad, dMax = hi + pad;
+  const pct = (t: number) => ((t - dMin) / Math.max(0.001, dMax - dMin)) * 100;
+  const ticks = niceTicks(dMin, dMax);
+
+  const intakes = paired.concat(single).map((r) => (r.intake?.online ? r.intake.temp : null)).filter((v): v is number => v != null);
+  const hotIntake = intakes.length ? Math.max(...intakes) : null;
+
+  function Track({ r }: { r: Row }) {
+    const inT = r.intake?.online ? (r.intake.temp as number) : null;
+    const outT = r.exhaust?.online ? (r.exhaust.temp as number) : null;
+    const bar =
+      inT != null && outT != null
+        ? { left: pct(Math.min(inT, outT)), width: Math.abs(pct(outT) - pct(inT)) }
+        : null;
     return (
-      <span
-        className={`hm-cell ${t >= high ? "hot" : ""}`}
-        style={{ background: bg, color: inkFor(bg) }}
-        title={`${c.port} · ${autoName(c.eui)}\n${t.toFixed(1)} °C${
-          t >= high ? ` — at or over the ${high} °C limit` : ""
-        }\n${ago(nowSec() - c.ts)}${c.rom ? `\nprobe …${c.rom.slice(-6)}` : ""}`}
-      >
-        {t.toFixed(1)}
+      <span className="dumb-track">
+        {ticks.map((t) => (
+          <i key={t} className="dumb-tick" style={{ left: `${pct(t)}%` }} />
+        ))}
+        {high > dMin && high < dMax && (
+          <i className="dumb-hilimit" style={{ left: `${pct(high)}%` }} title={`High-temp limit ${high} °C`} />
+        )}
+        {bar && (
+          <i
+            className="dumb-bar"
+            style={{ left: `${bar.left}%`, width: `${bar.width}%`, background: deltaColor(r.delta as number, limit) }}
+          />
+        )}
+        {inT != null && (
+          <i
+            className="dumb-dot in"
+            style={{ left: `${pct(inT)}%`, background: tempColor(inT) }}
+            title={`${r.intake?.port} · ${autoName(r.intake?.eui || "")}\nintake ${inT.toFixed(1)} °C${
+              inT > ASHRAE_INTAKE_MAX ? `\n— above the ${ASHRAE_INTAKE_MAX} °C ASHRAE recommended inlet max` : ""
+            }\n${ago(nowSec() - (r.intake?.ts ?? 0))}`}
+          />
+        )}
+        {outT != null && (
+          <i
+            className={`dumb-dot out ${outT >= high ? "hot" : ""}`}
+            style={{ left: `${pct(outT)}%`, borderColor: tempColor(outT) }}
+            title={`${r.exhaust?.port} · ${autoName(r.exhaust?.eui || "")}\nexhaust ${outT.toFixed(1)} °C${
+              outT >= high ? ` — at or over the ${high} °C limit` : ""
+            }\n${ago(nowSec() - (r.exhaust?.ts ?? 0))}`}
+          />
+        )}
       </span>
     );
   }
 
-  let lastRack = "";
+  function RowView({ r }: { r: Row }) {
+    const outT = r.exhaust?.online ? (r.exhaust.temp as number) : null;
+    return (
+      <div className="dumb-row">
+        <span className="dumb-lbl" title={`${r.rack} / ${r.unit}`}>
+          {r.euis.map((e) => (
+            <i key={e} className="hm-node" style={{ background: nodeColor(e) }} title={autoName(e)} />
+          ))}
+          {r.label}
+        </span>
+        <Track r={r} />
+        {r.delta != null ? (
+          <b className="dumb-val" style={{ color: deltaColor(r.delta, limit) }}
+             title={`Rise across ${r.unit}: ${r.delta.toFixed(1)} °C (limit ${limit} °C)`}>
+            +{r.delta.toFixed(1)}
+          </b>
+        ) : (
+          <span className="dumb-val muted" title="No ΔT — only one side of this unit is reporting">
+            {outT != null ? `${outT.toFixed(1)}°` : "—"}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="card">
       <div className="hd hd-ico">
-        <Icon name="grid_on" size={18} /> Thermal map
+        <Icon name="align_horizontal_left" size={18} /> Thermal map
       </div>
 
       {err && <div className="bd error" role="alert">{err}</div>}
@@ -209,94 +266,62 @@ export default function ThermalMap() {
         <div className="bd muted">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="bd muted">
-          No rack layout yet. Build racks and units under Rack Layout, assign sensors to
-          ports, and every unit appears here.
+          No rack layout yet. Build racks and units under Rack Layout, assign sensors to ports,
+          and every unit appears here.
         </div>
       ) : (
-        <>
-          <div className="hm-sum small muted">
-            {rows.length} units · {withDelta} with ΔT
-            {gaps > 0 && (
+        <div className="dumb">
+          <div className="dumb-sum small muted">
+            {paired.length} of {rows.length} units measuring ΔT
+            {hotIntake != null && hotIntake > ASHRAE_INTAKE_MAX && (
               <>
                 {" · "}
-                <b title="These ports exist in the layout but have no sensor assigned, so no ΔT can be computed for their unit.">
-                  {gaps} port{gaps === 1 ? "" : "s"} unassigned
+                <b title={`ASHRAE TC9.9 recommends server inlet air at 18–${ASHRAE_INTAKE_MAX} °C. Intake air this warm is why exhausts run hot.`}>
+                  intake {hotIntake.toFixed(1)}° over ASHRAE {ASHRAE_INTAKE_MAX}°
                 </b>
               </>
             )}
           </div>
 
-          <div className="heatmap">
-            {rows.map((r) => {
-              const head = r.rack !== lastRack;
-              lastRack = r.rack;
-              return (
-                <div key={r.key} className="hm-block">
-                  {head && <div className="hm-rack">{r.rack}</div>}
-                  {head && (
-                    <div className="hm-row hm-head">
-                      <span />
-                      <span>In</span>
-                      <span>Out</span>
-                      <span>ΔT</span>
-                    </div>
-                  )}
-                  <div className="hm-row">
-                    <span className="hm-unit">
-                      {r.euis.map((e) => (
-                        <i
-                          key={e}
-                          className="hm-node"
-                          style={{ background: nodeColor(e) }}
-                          title={autoName(e)}
-                        />
-                      ))}
-                      {r.unit}
-                    </span>
-                    {cellView(r.intake)}
-                    {cellView(r.exhaust)}
-                    {r.delta == null ? (
-                      <span
-                        className="hm-cell none"
-                        title={
-                          r.intake?.assigned === false
-                            ? "No ΔT — this unit's intake port has no sensor assigned"
-                            : "No ΔT — both sides must be online to measure the rise"
-                        }
-                      >
-                        —
-                      </span>
-                    ) : (
-                      <span
-                        className={`hm-cell ${r.delta >= limit ? "hot" : ""}`}
-                        style={{
-                          background: deltaColor(r.delta, limit),
-                          color: inkFor(deltaColor(r.delta, limit)),
-                        }}
-                        title={`Rise across ${r.unit}: ${r.delta.toFixed(1)} °C (limit ${limit} °C)`}
-                      >
-                        {r.delta > 0 ? "+" : ""}
-                        {r.delta.toFixed(1)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="dumb-row dumb-axis">
+            <span />
+            <span className="dumb-track">
+              {ticks.map((t) => (
+                <i key={t} className="dumb-tickl" style={{ left: `${pct(t)}%` }}>{t}°</i>
+              ))}
+              {/* Label the limit line. Unlabelled, a red dashed rule just raises
+                  the question it was meant to answer. */}
+              {high > dMin && high < dMax && (
+                <i className="dumb-tickl lim" style={{ left: `${pct(high)}%` }}>limit</i>
+              )}
+            </span>
+            <span />
           </div>
 
-          <div className="hm-legend small muted">
-            <span className="hm-key">
-              15° <i className="grad" /> 55°
-            </span>
-            <span className="hm-key">
-              <i className="hm-cell unassigned">·</i> unassigned
-            </span>
-            <span className="hm-key">
-              <i className="hm-cell offline">—</i> offline
-            </span>
+          {paired.map((r) => <RowView key={r.key} r={r} />)}
+
+          {single.length > 0 && (
+            <>
+              <div className="dumb-sep small muted" title="ΔT needs both an intake and an exhaust. These units only have one side assigned or reporting, so the rise across them cannot be measured.">
+                one side only — no ΔT
+              </div>
+              {single.map((r) => <RowView key={r.key} r={r} />)}
+            </>
+          )}
+
+          {dark.length > 0 && (
+            <div className="dumb-sep small muted">
+              {dark.length} unit{dark.length === 1 ? "" : "s"} not reporting:{" "}
+              {dark.map((r) => r.label).join(", ")}
+            </div>
+          )}
+
+          <div className="dumb-legend small muted">
+            <span className="hm-key"><i className="dumb-dot in legend" /> intake</span>
+            <span className="hm-key"><i className="dumb-dot out legend" /> exhaust</span>
+            <span className="hm-key"><i className="dumb-bar legend" /> ΔT (limit {limit}°)</span>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
