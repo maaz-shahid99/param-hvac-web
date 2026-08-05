@@ -123,9 +123,28 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 .topbar-title .crumb { font-size: 12px; color: var(--faint); font-weight: 500; margin-bottom: 3px; }
 .topbar-title h1 { font-size: 26px; margin: 0; font-weight: 750; letter-spacing: -.6px; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
-.bell { position: relative; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; width: 40px; height: 40px; font-size: 17px; padding: 0; cursor: pointer; transition: background .15s; }
-.bell:hover { background: var(--surface-2); filter: none; }
-.bell-badge { position: absolute; top: -6px; right: -6px; min-width: 19px; height: 19px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 5px; border: 2px solid var(--surface); }
+/* Alerts button. The icon MUST be flex-centred: as a plain 40x40 button with
+   padding:0 the glyph sat on the text baseline and the control read as an empty
+   pill. With open alerts it turns accent-coloured and shows the count inline,
+   which is far easier to read at a glance than a tiny corner badge. */
+.bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px;
+  height: 40px; min-width: 40px; padding: 0 11px; color: var(--muted);
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.bell:hover { background: var(--surface-2); color: var(--text); filter: none; }
+.bell .bell-count { font-size: 13px; font-weight: 750; line-height: 1; }
+.bell.has-alerts {
+  background: var(--accent-soft); border-color: rgba(242, 59, 83, .38); color: var(--accent);
+  animation: bellPulse 2.2s ease-in-out infinite;
+}
+.bell.has-alerts:hover { background: var(--accent-soft); color: var(--accent-hover); }
+@keyframes bellPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242, 59, 83, .30); }
+  55%      { box-shadow: 0 0 0 6px rgba(242, 59, 83, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .bell.has-alerts { animation: none; } }
 .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 15px; }
 
 .page { padding: 4px 32px 36px; max-width: 1100px; animation: fadeIn .25s ease; }
@@ -218,6 +237,20 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .auth-card .sub { color: var(--muted); margin-bottom: 18px; }
 .auth-card .switch { text-align: center; margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
 .error { background: var(--red-soft); border: 1px solid rgba(239,62,84,.25); color: #c2304a; padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 13px; }
+
+/* Optional-firmware-update banner (components/OtaBanner.tsx). Informational, so
+   it uses the blue accent rather than the red reserved for alerts. */
+.ota-wrap { margin-bottom: 16px; }
+.ota-banner {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--blue-soft); border: 1px solid rgba(47,109,246,.22);
+  border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 10px;
+}
+.ota-banner .ota-ico { display: flex; color: var(--blue); flex: 0 0 auto; }
+.ota-banner .ota-txt { flex: 1 1 auto; min-width: 0; }
+.ota-banner .ota-txt b { font-size: 14px; }
+.ota-banner .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.ota-banner button { flex: 0 0 auto; }
 .toggle { display: flex; gap: 8px; align-items: center; }
 .switchbtn { width: 42px; height: 24px; border-radius: 999px; background: var(--border-strong); position: relative; cursor: pointer; transition: background .18s; }
 .switchbtn.on { background: var(--green); }

@@ -71,6 +71,9 @@ export const api = {
   reset: (b: Record<string, unknown>) =>
     req("/v1/auth/reset", { method: "POST", auth: false, body: b }),
   me: () => req("/v1/me"),
+  /** Change your own password while signed in (requires the current one). */
+  changePassword: (current_password: string, new_password: string) =>
+    req("/v1/auth/change-password", { method: "POST", body: { current_password, new_password } }),
 
   // members (admin manage; read allowed for any member)
   members: (state = "all") => req(`/v1/members?state=${state}`),
@@ -78,6 +81,8 @@ export const api = {
   rejectMember: (id: string) => req(`/v1/members/${id}/reject`, { method: "POST" }),
   setMemberNotify: (id: string, b: Record<string, unknown>) =>
     req(`/v1/members/${id}/notifications`, { method: "PUT", body: b }),
+  /** Remove yourself from the org. Refused for the last remaining admin. */
+  leaveOrg: () => req("/v1/members/me/leave", { method: "POST", body: {} }),
 
   // thresholds / alerts / temps
   thresholds: () => req("/v1/thresholds"),
@@ -114,6 +119,16 @@ export const api = {
   envCurrent: () => req("/v1/env/current"),
   envProbes: () => req("/v1/env/probes"),
   crashes: () => req("/v1/crashes"),
+
+  // firmware OTA (customer side). `available` lists only OPTIONAL builds newer
+  // than the fleet's current firmware — mandatory ones auto-apply and are never
+  // listed. Approving one lets the gateway pick it up on its next OTA poll.
+  // Gateway self-report: firmware versions, free heap, mesh role.
+  fleet: () => req("/v1/fleet"),
+
+  otaAvailable: () => req("/v1/ota/available"),
+  approveOta: (kind: string, version: number) =>
+    req("/v1/ota/approve", { method: "POST", body: { kind, version } }),
 };
 
 /** Fetch an authenticated CSV export and trigger a browser download. The export

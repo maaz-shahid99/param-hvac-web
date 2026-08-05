@@ -18,10 +18,16 @@ function NotificationBell() {
     const id = setInterval(f, 10000);
     return () => clearInterval(id);
   }, []);
+  const label = count > 0 ? `${count} open alert${count === 1 ? "" : "s"}` : "No open alerts";
   return (
-    <button className="bell" title="Alerts" onClick={() => nav("/alerts")}>
+    <button
+      className={`bell${count > 0 ? " has-alerts" : ""}`}
+      title={label}
+      aria-label={label}
+      onClick={() => nav("/alerts")}
+    >
       <Icon name={count > 0 ? "notifications_active" : "notifications"} size={20} fill={count > 0} />
-      {count > 0 && <span className="bell-badge">{count}</span>}
+      {count > 0 && <span className="bell-count">{count}</span>}
     </button>
   );
 }

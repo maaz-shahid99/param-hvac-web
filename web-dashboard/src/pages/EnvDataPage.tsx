@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, autoName, downloadCsv } from "../api";
-import { ago, nowSec } from "../components/Cards";
+import { ago, nowSec, compareLocation, naturalCompare } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -11,6 +11,7 @@ type Env = {
 
 export default function EnvDataPage() {
   const [env, setEnv] = useState<Env[]>([]);
+  const [kinds, setKinds] = useState<Record<string, string>>({});
   const [sensors, setSensors] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,10 +20,32 @@ export default function EnvDataPage() {
     try {
       const [e, p] = await Promise.all([api.envCurrent(), api.envProbes()]);
       const list: Env[] = (e.env || []).slice();
-      list.sort((a, b) => (a.name || a.eui).localeCompare(b.name || b.eui));
+      list.sort((a, b) => naturalCompare(a.name || a.eui, b.name || b.eui));
       setEnv(list);
-      setSensors(p.probes || []);
+      // The server builds this from a set, so the order it arrives in is
+      // arbitrary. Order it physically: rack alphabetical, unit by number, then
+      // intake before exhaust. Probes with no rack mapping sort to the end —
+      // they have no place in the layout to sort by.
+      const probes = (p.probes || []).slice().sort((a: any, b: any) => {
+        const am = !!a.location, bm = !!b.location;
+        if (am !== bm) return am ? -1 : 1;
+        if (am) return compareLocation(a.location, b.location);
+        return naturalCompare(a.label || a.eui, b.label || b.eui);
+      });
+      setSensors(probes);
       setErr(null);
+      // The BME reporters are routers AND the gateway, but this list used to name
+      // every one of them "Router-XXXX". Resolve the real kind so the gateway
+      // isn't disguised as a router.
+      try {
+        const mesh = await api.routers();
+        const km: Record<string, string> = {};
+        for (const m of (mesh.routers || []) as any[]) {
+          const eui = String(m.eui || "").toLowerCase();
+          if (eui) km[eui] = m.kind || "router";
+        }
+        setKinds(km);
+      } catch { /* falls back to "router" */ }
     } catch (ex: any) {
       setErr(ex.message || "Could not reach the cloud server.");
     }
@@ -61,7 +84,7 @@ export default function EnvDataPage() {
               <div className="btnrow">
                 <span className="iconwrap blue"><Icon name="thermostat" size={20} /></span>
                 <div>
-                  <div>{d.name || autoName(d.eui, "router")}</div>
+                  <div>{d.name || autoName(d.eui, kinds[d.eui.toLowerCase()] || "router")}</div>
                   <div className="small muted mono">{d.eui}{d.ts ? ` · ${ago(nowSec() - d.ts)}` : ""}</div>
                 </div>
               </div>
