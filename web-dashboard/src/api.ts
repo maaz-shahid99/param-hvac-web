@@ -81,6 +81,8 @@ export const api = {
   rejectMember: (id: string) => req(`/v1/members/${id}/reject`, { method: "POST" }),
   setMemberNotify: (id: string, b: Record<string, unknown>) =>
     req(`/v1/members/${id}/notifications`, { method: "PUT", body: b }),
+  /** Remove yourself from the org. Refused for the last remaining admin. */
+  leaveOrg: () => req("/v1/members/me/leave", { method: "POST", body: {} }),
 
   // thresholds / alerts / temps
   thresholds: () => req("/v1/thresholds"),

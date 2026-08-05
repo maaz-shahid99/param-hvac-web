@@ -115,6 +115,26 @@ export default function MembersPage() {
                         disabled={!m.phone}
                         onClick={() => guard(() => api.setMemberNotify(m.id, { sms_enabled: !m.sms_enabled }))}
                       />
+                      {/* The server has always accepted a role change here; it was
+                          just never reachable from any UI. It refuses to demote the
+                          last admin, and that error surfaces via guard(). */}
+                      <button
+                        className="ghost"
+                        title={m.role === "admin"
+                          ? "Demote to member (removes admin rights)"
+                          : "Promote to admin (full access to settings, members and keys)"}
+                        onClick={() => {
+                          const to = m.role === "admin" ? "member" : "admin";
+                          const who = m.name || m.email;
+                          if (!confirm(to === "admin"
+                            ? `Make ${who} an admin? They'll be able to change thresholds, manage members and mint gateway keys.`
+                            : `Remove admin rights from ${who}?`)) return;
+                          guard(() => api.setMemberNotify(m.id, { role: to }));
+                        }}
+                      >
+                        <Icon name={m.role === "admin" ? "person_remove" : "shield_person"} size={16} />
+                        {m.role === "admin" ? "Make member" : "Make admin"}
+                      </button>
                     </div>
                   ) : (
                     <div className="btnrow">

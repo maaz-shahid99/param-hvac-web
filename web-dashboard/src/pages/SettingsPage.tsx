@@ -50,6 +50,25 @@ export default function SettingsPage() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const [leaveErr, setLeaveErr] = useState<string | null>(null);
+  const leaveOrg = async () => {
+    setLeaveErr(null);
+    if (!confirm(
+      "Leave this organization?\n\nYour account is removed and you stop receiving alerts. " +
+      "You can rejoin later with the org code."
+    )) return;
+    setLeaveBusy(true);
+    try {
+      await api.leaveOrg();
+      signOut();                      // the account no longer exists — drop the session
+    } catch (e: any) {
+      setLeaveErr(e?.message || "Could not leave the organization.");
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+
   const changePassword = async () => {
     setPwMsg(null);
     if (newPw !== confirmPw) { setPwMsg({ ok: false, text: "New passwords don't match." }); return; }
@@ -130,6 +149,22 @@ export default function SettingsPage() {
             </div>
             <button className="danger" onClick={signOut}><Icon name="logout" size={17} /> Sign out</button>
           </div>
+          {/* Leaving deletes this account from the org. The server refuses if you
+              are the last admin, so nobody can strand the organization. */}
+          <div className="row">
+            <div>
+              <div>Leave organization</div>
+              <div className="small muted">
+                Removes your account from <b>{profile?.org_code || "this org"}</b> and stops your
+                alerts. You can rejoin later with the org code.
+                {isAdmin && " As an admin, promote someone else first if you're the only one."}
+              </div>
+            </div>
+            <button className="danger" disabled={leaveBusy} onClick={leaveOrg}>
+              <Icon name="exit_to_app" size={17} /> {leaveBusy ? "Leaving…" : "Leave"}
+            </button>
+          </div>
+          {leaveErr && <div className="bd"><span className="small" style={{ color: "var(--red)" }}>{leaveErr}</span></div>}
         </div>
 
         <div className="card">
