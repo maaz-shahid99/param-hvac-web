@@ -200,7 +200,7 @@ export default function AlertsThresholdsPage() {
         )}
         <button className="secondary" onClick={() => refresh(false)}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
-      <div className="page">
+      <div className="page cols">
         {/* Rendered inside the layout: the old early return replaced the
             whole screen, so the top bar and alert bell vanished on every
             navigation to this page. */}
@@ -368,7 +368,7 @@ export default function AlertsThresholdsPage() {
           </div>
         </div>
 
-        <LiveTempsCard sensors={sensors} highLimit={effHigh} />
+        <LiveTempsCard sensors={sensors} highLimit={effHigh} wide />
       </div>
     </>
   );

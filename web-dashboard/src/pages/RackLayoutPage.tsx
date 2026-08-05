@@ -125,7 +125,7 @@ export default function RackLayoutPage() {
           </button>
         )}
       </PageHeader>
-      <div className="page">
+      <div className="page cols">
         {/* Rendered inside the layout: the old early return replaced the
             whole screen, so the top bar and alert bell vanished on every
             navigation to this page. */}

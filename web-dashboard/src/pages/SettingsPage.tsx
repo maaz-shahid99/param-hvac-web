@@ -150,7 +150,7 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeader title="Settings" />
-      <div className="page">
+      <div className="page cols">
         {settingsErr && <div className="error" role="alert">{settingsErr}</div>}
         {isAdmin && (
           <div className="card">
@@ -181,7 +181,7 @@ export default function SettingsPage() {
             <div className="hd hd-ico"><Icon name="schedule" size={18} /> Data collection</div>
             <div className="bd">
               <label>How often devices sample & forward data (seconds, 10–3600)</label>
-              <input type="number" min={10} max={3600} value={interval}
+              <input className="input-sm" type="number" min={10} max={3600} value={interval}
                      onChange={(e) => setInterval(e.target.value)} />
               <div style={{ marginTop: 12 }} className="btnrow">
                 <button onClick={saveInterval} disabled={intervalBusy}>

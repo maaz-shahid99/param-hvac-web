@@ -68,7 +68,7 @@ export default function EnvDataPage() {
       <PageHeader title="Environment & Logs">
         <button className="secondary" onClick={refresh}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
-      <div className="page">
+      <div className="page cols">
         {err && <div className="error">{err}</div>}
 
         <div className="card">
@@ -101,7 +101,10 @@ export default function EnvDataPage() {
           ))}
         </div>
 
-        <div className="card">
+        {/* Full width in columns: there is one router but sixteen probes, so
+            side-by-side left a router card beside a column ten times its height
+            — most of the page was empty next to a single row. */}
+        <div className="card wide listcard">
           <div className="hd hd-ico" style={{ justifyContent: "space-between" }}>
             <span className="hd-ico"><Icon name="thermostat" size={18} /> Sensors — temperatures ({sensors.length})</span>
             <button className="secondary" disabled={busy} onClick={() => dl("/v1/readings/export.csv", "sensors.csv")}>

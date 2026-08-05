@@ -77,10 +77,10 @@ export default function DiagnosticsPage() {
         <button className="secondary" disabled={busy} onClick={dl}><Icon name="download" size={16} /> CSV</button>
         <button className="secondary" onClick={refresh}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
-      <div className="page">
+      <div className="page cols">
         {err && <div className="error">{err}</div>}
         {fleet && (
-          <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card">
             <div className="hd hd-ico"><Icon name="memory" size={18} /> Gateway health</div>
             <div className="row">
               <div className="btnrow">
@@ -100,7 +100,10 @@ export default function DiagnosticsPage() {
             </div>
           </div>
         )}
-        <div className="card">
+        {/* Full width, but the reports flow into columns: 57 collapsed rows each
+            stretched to 1400px put the label and the chevron ~1200px apart, and
+            the list is scanned far more often than a single report is expanded. */}
+        <div className="card wide listcard">
           <div className="hd hd-ico"><Icon name="bug_report" size={18} /> Firmware crash reports ({crashes.length})</div>
           {!loaded ? (
             <div className="bd muted">Loading crash reports…</div>

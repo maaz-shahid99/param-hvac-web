@@ -286,12 +286,16 @@ export function AlertsCard({
 export function LiveTempsCard({
   sensors,
   highLimit,
+  wide,
 }: {
   sensors: any[];
   highLimit: number;
+  /** Span the full row inside a `.page.cols` grid — the reading rows are long
+   *  (location + EUI + age + slot) and wrap badly in a 420px column. */
+  wide?: boolean;
 }) {
   return (
-    <div className="card">
+    <div className={`card${wide ? " wide listcard" : ""}`}>
       <div className="hd hd-ico"><Icon name="thermostat" size={18} /> Live temperatures</div>
       {sensors.length === 0 ? (
         <div className="bd muted">No readings yet. Once the gateway posts, sensors appear here.</div>
