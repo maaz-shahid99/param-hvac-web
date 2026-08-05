@@ -9,6 +9,46 @@ export class ApiError extends Error {
   }
 }
 
+/** Turn a FastAPI error body into something a human can read.
+ *
+ *  FastAPI returns `detail` as a STRING for HTTPException but as an ARRAY OF
+ *  OBJECTS for request-validation (422) errors:
+ *    {"detail":[{"type":"missing","loc":["body","password"],"msg":"Field required"}]}
+ *  Passing that array straight to `new Error()` stringifies it to the literal
+ *  "[object Object]", which is what every error banner in the app used to show
+ *  for any 422 — and with no client-side validation, an empty form submit was
+ *  the normal way to get there. */
+function readableDetail(data: any, status: number): string {
+  const d = data?.detail;
+  if (typeof d === "string" && d.trim()) return d;
+  if (Array.isArray(d)) {
+    const parts = d
+      .map((e: any) => {
+        if (typeof e === "string") return e;
+        // Drop the leading "body"/"query" segment — it means nothing to a user.
+        const field = Array.isArray(e?.loc) ? e.loc.filter((s: any) => s !== "body" && s !== "query").join(".") : "";
+        const msg = e?.msg || e?.type || "invalid value";
+        return field ? `${field}: ${msg}` : msg;
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  if (d && typeof d === "object") {
+    const m = (d as any).msg || (d as any).message;
+    if (typeof m === "string" && m) return m;
+  }
+  return `HTTP ${status}`;
+}
+
+/** Called when any request comes back 401 so the app can end the session once,
+ *  centrally. Without this an expired token surfaced as component-level noise:
+ *  the alert bell silently showed zero and the gateway card claimed the hardware
+ *  was OFFLINE — i.e. the UI blamed the equipment for an auth failure. */
+let _onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  _onUnauthorized = fn;
+}
+
 let _token: string | null = localStorage.getItem("cloud_jwt");
 
 export function setToken(t: string | null) {
@@ -51,9 +91,26 @@ async function req(
     throw new ApiError(0, "Could not reach the server. Check the URL and your connection.");
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  // Guard the parse: a reverse proxy 502, a captive portal, or a misrouted SPA
+  // index.html all return HTML. JSON.parse would throw a raw SyntaxError that
+  // isn't an ApiError, escaping every `instanceof ApiError` check and surfacing
+  // to the user as `Unexpected token '<', "<!doctype "... is not valid JSON`.
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (!res.ok) {
+        throw new ApiError(res.status, `Server error (HTTP ${res.status}). The response was not valid JSON.`);
+      }
+      throw new ApiError(0, "The server returned an unreadable response.");
+    }
+  }
   if (!res.ok) {
-    throw new ApiError(res.status, (data && data.detail) || `HTTP ${res.status}`);
+    // Sign out once, centrally, rather than letting each caller invent its own
+    // (usually silent) handling of an expired session.
+    if (res.status === 401 && auth) _onUnauthorized?.();
+    throw new ApiError(res.status, readableDetail(data, res.status));
   }
   return data;
 }
@@ -81,6 +138,10 @@ export const api = {
   rejectMember: (id: string) => req(`/v1/members/${id}/reject`, { method: "POST" }),
   setMemberNotify: (id: string, b: Record<string, unknown>) =>
     req(`/v1/members/${id}/notifications`, { method: "PUT", body: b }),
+  /** Remove someone from the org (admin). Deletes the account, so the address can
+   *  be invited back later; the server blocks removing yourself or the last admin. */
+  removeMember: (id: string) =>
+    req(`/v1/members/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Remove yourself from the org. Refused for the last remaining admin. */
   leaveOrg: () => req("/v1/members/me/leave", { method: "POST", body: {} }),
 
@@ -92,11 +153,22 @@ export const api = {
   routers: () => req("/v1/routers"),
   alerts: (state = "open") => req(`/v1/alerts?state=${state}`),
   ackAlert: (id: string) => req(`/v1/alerts/${id}/ack`, { method: "POST" }),
+  /** Read the extra alert addresses so an editor can prefill instead of
+   *  overwriting blind (there was no GET, which is how the list got wiped). */
+  recipients: () => req("/v1/recipients"),
   setRecipients: (b: Record<string, unknown>) =>
     req("/v1/recipients", { method: "PUT", body: b }),
+
+  // Is alerting actually reaching anyone, or only being written to a log?
+  notificationsStatus: () => req("/v1/notifications/status"),
+  sendTestNotification: () => req("/v1/notifications/test", { method: "POST", body: {} }),
   createApiKey: (label: string) =>
     req("/v1/apikeys", { method: "POST", body: { label } }),
   apiKeys: () => req("/v1/apikeys"),
+  /** Revoke a key. The server refuses if it's the last one a gateway is
+   *  actively using — that would cut the uplink irrecoverably. */
+  deleteApiKey: (id: string) =>
+    req(`/v1/apikeys/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   // topology (rack -> unit -> port)
   topology: () => req("/v1/topology"),
@@ -114,6 +186,12 @@ export const api = {
   settings: () => req("/v1/settings"),
   putSettings: (b: Record<string, unknown>) =>
     req("/v1/settings", { method: "PUT", body: b }),
+
+  /** Bucketed intake/exhaust/ΔT history per rack unit, for the trend chart.
+   *  Aggregated server-side the same way the alert engine computes ΔT, so the
+   *  graph and the alert history can't tell different stories. */
+  readingsSeries: (hours: number, points = 120) =>
+    req(`/v1/readings/series?hours=${hours}&points=${points}`),
 
   // environmental data (router/gateway BME) + firmware crash reports
   envCurrent: () => req("/v1/env/current"),

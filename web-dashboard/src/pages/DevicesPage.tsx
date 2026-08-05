@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api, autoName } from "../api";
 import { ago, isOnline, nowSec } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
@@ -85,22 +86,29 @@ export default function DevicesPage() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 10000);
 
   async function rename(eui: string, kind: string, role: string, current: string) {
     const name = window.prompt("Device name", current);
     if (name == null) return;
-    try { await api.putDevices([{ eui, kind, role, name: name.trim() }]); refresh(); }
-    catch (e: any) { setErr(e.message); }
+    const clean = name.trim();
+    // `name.trim()` could be "" — which saved a blank label and left the row
+    // rendering nothing at all.
+    if (!clean) {
+      setErr("A device name can't be empty.");
+      return;
+    }
+    if (clean.length > 64) {
+      setErr("Device names are limited to 64 characters.");
+      return;
+    }
+    try { await api.putDevices([{ eui, kind, role, name: clean }]); refresh(); }
+    catch (e: any) { setErr(e?.message || "Could not rename that device."); }
   }
   async function remove(eui: string, label: string) {
     if (!window.confirm(`Remove "${label}" from the list?\n\nIt reappears automatically if it comes back online.`)) return;
     try { await api.deleteDevice(eui); refresh(); }
-    catch (e: any) { setErr(e.message); }
+    catch (e: any) { setErr(e?.message || "Could not remove that device."); }
   }
 
   const online = sensors.filter((r) => r.online).length;
@@ -141,8 +149,8 @@ export default function DevicesPage() {
                   </div>
                   <div className="btnrow">
                     <span className={`badge ${d.online ? "green" : "grey"}`}>{d.online ? "ONLINE" : "OFFLINE"}</span>
-                    <button className="iconbtn" title="Rename" onClick={() => rename(d.eui, isGw ? "gateway" : "router", d.role, d.name)}><Icon name="edit" size={18} /></button>
-                    <button className="iconbtn" title="Remove" onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
+                    <button className="iconbtn" title="Rename" aria-label={`Rename ${d.name || d.eui}`} onClick={() => rename(d.eui, isGw ? "gateway" : "router", d.role, d.name)}><Icon name="edit" size={18} /></button>
+                    <button className="iconbtn" title="Remove" aria-label={`Remove ${d.name || d.eui} from the list`} onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
                   </div>
                 </div>
               );
@@ -172,8 +180,8 @@ export default function DevicesPage() {
                 </div>
                 <div className="btnrow">
                   <span className={`badge ${d.online ? "green" : "grey"}`}>{d.online ? "ONLINE" : "OFFLINE"}</span>
-                  <button className="iconbtn" title="Rename" onClick={() => rename(d.eui, "sensor", "", d.name)}><Icon name="edit" size={18} /></button>
-                  <button className="iconbtn" title="Remove" onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
+                  <button className="iconbtn" title="Rename" aria-label={`Rename ${d.name || d.eui}`} onClick={() => rename(d.eui, "sensor", "", d.name)}><Icon name="edit" size={18} /></button>
+                  <button className="iconbtn" title="Remove" aria-label={`Remove ${d.name || d.eui} from the list`} onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
                 </div>
               </div>
             ))

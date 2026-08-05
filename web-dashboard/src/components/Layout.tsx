@@ -1,7 +1,11 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { createContext, useContext, useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
+import { api } from "../api";
+import { usePoll } from "../usePoll";
 import Icon from "./Icon";
 import OtaBanner from "./OtaBanner";
+import ErrorBoundary from "./ErrorBoundary";
 
 const items = [
   { to: "/", label: "Dashboard", icon: "dashboard", end: true },
@@ -15,13 +19,55 @@ const items = [
   { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
+/** Lets PageHeader render the hamburger inline in the top bar while Layout owns
+ *  the drawer state. */
+const NavCtx = createContext<{ open: () => void }>({ open: () => {} });
+export const useNavDrawer = () => useContext(NavCtx);
+
 export default function Layout() {
   const { profile, signOut } = useAuth();
+  const { pathname } = useLocation();
   const isAdmin = profile?.role === "admin";
   const navItems = items.filter((it) => !it.adminOnly || isAdmin);
+
+  // Off-canvas drawer below the mobile breakpoint. The sidebar was a fixed 256px
+  // column with no way to dismiss it, so on a phone it ate two thirds of the
+  // screen and the content beside it was clipped.
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Pending join requests, badged on the Members item. Without this a request
+  // was invisible unless someone happened to open that page — the alert bell
+  // only counts temperature alerts.
+  const [pending, setPending] = useState(0);
+  usePoll(async () => {
+    if (!isAdmin) return;
+    try {
+      const r = await api.members("pending");
+      setPending((r.members || []).length);
+    } catch { setPending(0); }
+  }, 60000);
+  // Close on navigation, so tapping a link doesn't leave the drawer covering the
+  // page you just opened.
+  useEffect(() => { setNavOpen(false); }, [pathname]);
+  // Escape closes it, matching every other drawer people have used.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
   return (
+    <NavCtx.Provider value={{ open: () => setNavOpen(true) }}>
     <div className="layout">
-      <aside className="sidebar">
+      {navOpen && (
+        <button
+          className="navscrim"
+          aria-label="Close the navigation menu"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <aside className={`sidebar${navOpen ? " open" : ""}`}>
         <div className="brand">
           <span className="brand-logo">
             <Icon name="thermostat" size={20} fill />
@@ -29,13 +75,21 @@ export default function Layout() {
           HVAC Monitor
         </div>
         <div className="nav-group">Monitoring</div>
-        <nav className="nav">
+        <nav className="nav" aria-label="Main">
           {navItems.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end}>
               <span className="ico">
                 <Icon name={it.icon} size={20} />
               </span>
               {it.label}
+              {it.to === "/members" && pending > 0 && (
+                <span
+                  className="navbadge"
+                  title={`${pending} pending join request${pending === 1 ? "" : "s"}`}
+                >
+                  {pending}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -53,8 +107,13 @@ export default function Layout() {
         {/* Mounted at the shell level so a pending optional update is visible on
             every page, not just the dashboard. Self-hides when there's none. */}
         <OtaBanner />
-        <Outlet />
+        {/* Keyed on the route so navigating away clears a crashed page instead
+            of trapping the user on it. */}
+        <ErrorBoundary resetKey={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
+    </NavCtx.Provider>
   );
 }

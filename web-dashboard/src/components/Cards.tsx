@@ -9,6 +9,11 @@ export function nowSec() {
   return Date.now() / 1000;
 }
 export function ago(s: number): string {
+  // Clamp: these ages come from comparing a SERVER timestamp against the
+  // BROWSER's clock, and the appliance's clock currently runs ~35s ahead — so a
+  // fresh reading rendered as "-26s ago". Never show a negative age.
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  if (s < 5) return "just now";
   if (s < 60) return `${Math.round(s)}s ago`;
   if (s < 3600) return `${Math.round(s / 60)}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
@@ -16,6 +21,67 @@ export function ago(s: number): string {
 }
 export function isOnline(ts: number) {
   return nowSec() - ts < STALE_SECONDS;
+}
+
+/**
+ * Copy text to the clipboard, with a fallback for insecure origins.
+ *
+ * `navigator.clipboard` is undefined unless the page is a secure context, and
+ * this appliance is served over plain http — so the modern API silently isn't
+ * there. Returns whether the copy actually happened, so the caller can confirm
+ * or fall back to showing the value.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Format a number that came from unvalidated JSON. Returns an em dash rather
+ * than "NaN" or throwing, so a null reading degrades to "—" instead of taking
+ * the page down (a bare `.toFixed()` on a null threw a TypeError, and with no
+ * error boundary that blanked the whole app).
+ */
+export function num(v: unknown, digits = 1, unit = ""): string {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(digits)}${unit}`;
+}
+
+/**
+ * The high-temperature limit that alerts ACTUALLY fire on, from a /v1/thresholds
+ * response: the tenant override if one exists, else the server default.
+ *
+ * Both temperature cards used to colour against `defaults.high_c` while the
+ * threshold engine evaluated against the tenant override. With a default of 40
+ * and an override of 70 that painted probes at 41–53 °C bright red with no alert
+ * firing; flip the values and it silently paints them green WHILE alerting.
+ * Either way the dashboard contradicted the alarm.
+ */
+export function tenantHighLimit(thresholds: any): number {
+  const def = Number(thresholds?.defaults?.high_c);
+  const tenant = (thresholds?.thresholds || []).find((x: any) => x?.scope === "tenant");
+  const v = Number(tenant?.high_c);
+  if (Number.isFinite(v)) return v;
+  return Number.isFinite(def) ? def : 40;
 }
 
 // --- ordering helpers -------------------------------------------------------
@@ -93,6 +159,70 @@ function rgb(c: [number, number, number]) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+/**
+ * ΔT -> colour, scored against the tenant's own delta limit rather than an
+ * absolute temperature. A 14 °C rise is healthy where the limit is 30 and
+ * alarming where it's 15, so the ramp has to be relative or it contradicts the
+ * alert engine — the same mistake `tenantHighLimit` exists to prevent.
+ */
+export function deltaColor(d: number, limit: number): string {
+  const lim = Number.isFinite(limit) && limit > 0 ? limit : 30;
+  const k = d / lim;
+  if (k >= 1) return "rgb(230,90,70)";      // at or over the limit: alerting
+  if (k >= 0.75) return "rgb(235,180,50)";  // closing in
+  if (k >= 0.4) return "rgb(120,175,110)";
+  return "rgb(90,140,210)";                 // barely any rise across the unit
+}
+
+/**
+ * Fleet totals for the "Sensors online" tile.
+ *
+ * The tile used to divide by the number of rows in /v1/current, which is built
+ * from `SELECT DISTINCT eui FROM readings` — so a commissioned node that has
+ * never reported (or whose data aged out) drops out of the numerator AND the
+ * denominator together, and the fraction can never expose it. That is how
+ * "16 / 16 · all reporting" was rendered while a whole node sat dark.
+ *
+ * Probes and nodes are counted separately on purpose: probe ROMs are discovered
+ * from readings, so the server genuinely does not know how many probes a node
+ * that has never reported has. Only the node itself can be counted.
+ */
+export function fleetRollup(currentRows: any[], roster: any[]) {
+  const probesTotal = currentRows.length;
+  const probesOnline = currentRows.filter((s) => isOnline(+s.ts)).length;
+
+  // newest ts per EUI seen in /v1/current
+  const seen = new Map<string, number>();
+  for (const s of currentRows) {
+    const eui = String(s.eui || "").toLowerCase();
+    if (!eui) continue;
+    const ts = Number(s.ts) || 0;
+    if (ts >= (seen.get(eui) ?? -Infinity)) seen.set(eui, ts);
+  }
+  // Nodes = commissioned sensors UNION whatever is actually reporting, so this
+  // stays right whether the roster is stale or the device predates it.
+  const nodes = new Set<string>(seen.keys());
+  for (const d of roster || []) {
+    if (String(d?.kind ?? "sensor") !== "sensor") continue;
+    const eui = String(d?.eui || "").toLowerCase();
+    if (eui) nodes.add(eui);
+  }
+  const darkEuis = [...nodes].filter((e) => {
+    const ts = seen.get(e);
+    return ts === undefined || !isOnline(ts);
+  }).sort();
+
+  return {
+    probesOnline,
+    probesTotal,
+    nodesTotal: nodes.size,
+    nodesReporting: nodes.size - darkEuis.length,
+    darkEuis,
+    /** true when a dark node has never sent anything at all, vs went quiet. */
+    neverReported: (eui: string) => !seen.has(eui),
+  };
+}
+
 // Hotter sensor -> faster fan. Returns seconds per revolution.
 export function tempSpinSeconds(t: number): number {
   const lo = 18, hi = 55, slow = 2.6, fast = 0.5;
@@ -122,10 +252,13 @@ export function AlertsCard({
         alerts.map((a) => {
           const acked = a.state === "acked";
           const meta = KIND_META[a.kind] || { icon: "warning", label: a.kind };
+          // Only "stale" was special-cased, so any other alert with a missing
+          // value rendered "NaN°C (limit NaN°C)" in the most prominent element
+          // on the page. num() degrades to an em dash instead.
           const sub =
             a.kind === "stale"
               ? "Sensor stopped reporting"
-              : `${(+a.value).toFixed(1)}°C (limit ${(+a.threshold).toFixed(1)}°C)`;
+              : `${num(a.value, 1, "°C")} (limit ${num(a.threshold, 1, "°C")})`;
           return (
             <div className="row" key={a.id}>
               <div className="btnrow">
@@ -182,7 +315,10 @@ export function LiveTempsCard({
                 </div>
               </div>
               <span className="small muted">
-                {ago(t)}{s.slot ? ` · slot ${s.slot}` : ""}
+                {/* A missing ts made t NaN, and ago(NaN) falls through every
+                    comparison to render the literal "NaNd ago". */}
+                {Number.isFinite(t) ? ago(t) : "no timestamp"}
+                {s.slot ? ` · slot ${s.slot}` : ""}
               </span>
             </div>
           );

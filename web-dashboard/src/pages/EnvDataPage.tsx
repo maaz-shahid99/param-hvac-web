@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api, autoName, downloadCsv } from "../api";
-import { ago, nowSec, compareLocation, naturalCompare } from "../components/Cards";
+import { ago, nowSec, compareLocation, naturalCompare, num } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -11,6 +12,9 @@ type Env = {
 
 export default function EnvDataPage() {
   const [env, setEnv] = useState<Env[]>([]);
+  // Distinguishes "nothing to show" from "haven't asked yet" — the empty
+  // state used to be asserted as fact during the very first fetch.
+  const [loaded, setLoaded] = useState(false);
   const [kinds, setKinds] = useState<Record<string, string>>({});
   const [sensors, setSensors] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -46,15 +50,12 @@ export default function EnvDataPage() {
         }
         setKinds(km);
       } catch { /* falls back to "router" */ }
+      setLoaded(true);
     } catch (ex: any) {
       setErr(ex.message || "Could not reach the cloud server.");
     }
   }
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 60000); // poll every minute
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 60000); // routers report roughly once a minute
 
   const dl = async (path: string, file: string) => {
     setBusy(true);
@@ -77,7 +78,9 @@ export default function EnvDataPage() {
               <Icon name="download" size={16} /> CSV
             </button>
           </div>
-          {env.length === 0 ? (
+          {!loaded ? (
+            <div className="bd muted">Loading…</div>
+          ) : env.length === 0 ? (
             <div className="bd muted">No router environment data yet. Routers forward their BME readings over the mesh.</div>
           ) : env.map((d) => (
             <div className="row" key={d.eui}>
@@ -88,8 +91,11 @@ export default function EnvDataPage() {
                   <div className="small muted mono">{d.eui}{d.ts ? ` · ${ago(nowSec() - d.ts)}` : ""}</div>
                 </div>
               </div>
+              {/* These come from unvalidated JSON. A router with a dead BME
+                  sensor sends nulls, and a bare .toFixed() there threw a
+                  TypeError that took the whole app down with it. */}
               <span className="small">
-                {d.temp.toFixed(1)}°C · {d.hum.toFixed(0)}%RH · {d.pres.toFixed(0)}hPa · VOC {Math.round(d.voc)}
+                {num(d.temp, 1, "°C")} · {num(d.hum, 0, "%RH")} · {num(d.pres, 0, "hPa")} · VOC {num(d.voc, 0)}
               </span>
             </div>
           ))}
@@ -102,7 +108,9 @@ export default function EnvDataPage() {
               <Icon name="download" size={16} /> CSV
             </button>
           </div>
-          {sensors.length === 0 ? (
+          {!loaded ? (
+            <div className="bd muted">Loading…</div>
+          ) : sensors.length === 0 ? (
             <div className="bd muted">No sensor data yet.</div>
           ) : sensors.map((s: any, i: number) => {
             const t = s.temp != null ? +s.temp : NaN;

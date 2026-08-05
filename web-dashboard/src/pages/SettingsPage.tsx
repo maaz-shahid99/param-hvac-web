@@ -3,6 +3,7 @@ import { api, getBaseUrl, setBaseUrl } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
+import PasswordInput from "../components/PasswordInput";
 
 export default function SettingsPage() {
   const { profile, isAdmin, signOut } = useAuth();
@@ -13,26 +14,57 @@ export default function SettingsPage() {
   const [gran, setGran] = useState<string | null>(null);
   const [interval, setInterval] = useState<string>("60");
   const [intervalSaved, setIntervalSaved] = useState(false);
+  // Surfaced instead of swallowed: a failed load left `gran` null (so NEITHER
+  // segment rendered selected) while the helper text still asserted a default,
+  // and a subsequent save wrote the hardcoded 60 over the real server value.
+  const [settingsErr, setSettingsErr] = useState<string | null>(null);
+  const [granBusy, setGranBusy] = useState(false);
+  const [intervalBusy, setIntervalBusy] = useState(false);
   useEffect(() => {
     api.settings().then((s) => {
       setGran(s.alert_granularity || "sensor");
       setInterval(String(s.collect_interval_s ?? 60));
-    }).catch(() => {});
+      setSettingsErr(null);
+    }).catch((e: any) => {
+      setSettingsErr(e?.message || "Could not load settings from the server.");
+    });
   }, []);
   const setGranularity = async (v: string) => {
+    if (granBusy) return;
     const prev = gran;
     setGran(v);
-    try { await api.putSettings({ alert_granularity: v }); }
-    catch { setGran(prev); }
+    setGranBusy(true);
+    setSettingsErr(null);
+    try {
+      await api.putSettings({ alert_granularity: v });
+    } catch (e: any) {
+      setGran(prev); // revert — but say why, instead of silently snapping back
+      setSettingsErr(e?.message || "Could not save the alert granularity.");
+    } finally {
+      setGranBusy(false);
+    }
   };
   const saveInterval = async () => {
-    const n = Math.max(10, Math.min(3600, Number(interval) || 60));
+    if (intervalBusy) return;
+    const raw = Number(interval);
+    if (!Number.isFinite(raw)) {
+      setSettingsErr("Collection interval must be a number.");
+      return;
+    }
+    const n = Math.max(10, Math.min(3600, Math.round(raw)));
+    if (n !== raw) setSettingsErr(`Interval must be 10–3600 s — using ${n}s.`);
+    else setSettingsErr(null);
     setInterval(String(n));
+    setIntervalBusy(true);
     try {
       await api.putSettings({ collect_interval_s: n });
       setIntervalSaved(true);
       setTimeout(() => setIntervalSaved(false), 1500);
-    } catch { /* */ }
+    } catch (e: any) {
+      setSettingsErr(e?.message || "Could not save the collection interval.");
+    } finally {
+      setIntervalBusy(false);
+    }
   };
 
   const save = () => {
@@ -49,6 +81,33 @@ export default function SettingsPage() {
   const [confirmPw, setConfirmPw] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Email/SMS delivery channel. notify_email falls through SES -> SMTP -> log and
+  // never raises, so a server with no mail configured looks perfectly healthy
+  // while every alert it "sends" only reaches a log file.
+  const [delivery, setDelivery] = useState<any>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.notificationsStatus().then(setDelivery).catch(() => setDelivery(null));
+  }, [isAdmin]);
+  const sendTest = async () => {
+    if (testBusy) return;
+    setTestBusy(true);
+    setTestMsg(null);
+    try {
+      const r = await api.sendTestNotification();
+      setTestMsg({
+        ok: !!r.ok,
+        text: r.ok ? `${r.detail} Check ${r.sent_to}.` : r.detail,
+      });
+    } catch (e: any) {
+      setTestMsg({ ok: false, text: e?.message || "Could not send the test email." });
+    } finally {
+      setTestBusy(false);
+    }
+  };
 
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveErr, setLeaveErr] = useState<string | null>(null);
@@ -70,6 +129,9 @@ export default function SettingsPage() {
   };
 
   const changePassword = async () => {
+    // The Enter handler called this directly, bypassing the button's disabled
+    // guard — holding Enter fired concurrent POSTs.
+    if (pwBusy) return;
     setPwMsg(null);
     if (newPw !== confirmPw) { setPwMsg({ ok: false, text: "New passwords don't match." }); return; }
     if (newPw.length < 6) { setPwMsg({ ok: false, text: "New password must be at least 6 characters." }); return; }
@@ -89,6 +151,7 @@ export default function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <div className="page">
+        {settingsErr && <div className="error" role="alert">{settingsErr}</div>}
         {isAdmin && (
           <div className="card">
             <div className="hd hd-ico"><Icon name="notifications_active" size={18} /> Alert granularity</div>
@@ -121,7 +184,9 @@ export default function SettingsPage() {
               <input type="number" min={10} max={3600} value={interval}
                      onChange={(e) => setInterval(e.target.value)} />
               <div style={{ marginTop: 12 }} className="btnrow">
-                <button onClick={saveInterval}><Icon name="save" size={17} /> Save</button>
+                <button onClick={saveInterval} disabled={intervalBusy}>
+                  <Icon name="save" size={17} /> {intervalBusy ? "Saving…" : "Save"}
+                </button>
                 {intervalSaved && <span className="small muted">Saved — propagates to the fleet via the gateway.</span>}
               </div>
             </div>
@@ -167,29 +232,79 @@ export default function SettingsPage() {
           {leaveErr && <div className="bd"><span className="small" style={{ color: "var(--red)" }}>{leaveErr}</span></div>}
         </div>
 
+        {isAdmin && delivery && (
+          <div className="card">
+            <div className="hd hd-ico"><Icon name="outgoing_mail" size={18} /> Alert delivery</div>
+            <div className="bd">
+              {delivery.email_configured ? (
+                <p className="small" style={{ marginTop: 0 }}>
+                  Email alerts are sent via <b>{delivery.email === "ses" ? "AWS SES" : `SMTP (${delivery.smtp_host})`}</b>
+                  {delivery.email_from ? <> from <span className="mono">{delivery.email_from}</span></> : null}.
+                </p>
+              ) : (
+                <p className="small" style={{ marginTop: 0, color: "var(--red)" }}>
+                  <b>Alerts are not being emailed.</b> No SES or SMTP is configured, so every alert is
+                  written to the server log only. Set <span className="mono">SMTP_HOST</span>,{" "}
+                  <span className="mono">SMTP_USER</span>, <span className="mono">SMTP_PASS</span> and{" "}
+                  <span className="mono">MAIL_FROM</span> in the server's <span className="mono">.env</span>,
+                  then restart and re-test.
+                </p>
+              )}
+              <p className="small muted">
+                SMS: {delivery.sms_configured
+                  ? <>sent via <b>{delivery.sms}</b>.</>
+                  : <>no SMS provider configured — SMS alerts are logged only, even for members who have SMS switched on.</>}
+              </p>
+              <div className="btnrow">
+                <button className="secondary" onClick={sendTest} disabled={testBusy}>
+                  <Icon name="send" size={16} /> {testBusy ? "Sending…" : "Send test email"}
+                </button>
+                {testMsg && (
+                  <span
+                    className="small"
+                    role={testMsg.ok ? "status" : "alert"}
+                    style={{ color: testMsg.ok ? "var(--green)" : "var(--red)" }}
+                  >
+                    {testMsg.text}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="card">
           <div className="hd hd-ico"><Icon name="lock" size={18} /> Change password</div>
           <div className="bd">
-            <div style={{ display: "grid", gap: 10, maxWidth: 380 }}>
+            {/* A real <form>: this was a div, so Enter did nothing in the first
+                two fields and only worked in the third via a keydown hack. */}
+            <form
+              style={{ display: "grid", gap: 10, maxWidth: 380 }}
+              onSubmit={(e) => { e.preventDefault(); changePassword(); }}
+            >
               <label className="small muted">Current password
-                <input type="password" autoComplete="current-password" value={curPw}
-                       onChange={(e) => setCurPw(e.target.value)} />
+                <PasswordInput value={curPw} onChange={setCurPw} autoComplete="current-password" />
               </label>
               <label className="small muted">New password
-                <input type="password" autoComplete="new-password" value={newPw}
-                       onChange={(e) => setNewPw(e.target.value)} />
+                <PasswordInput value={newPw} onChange={setNewPw} autoComplete="new-password" />
               </label>
               <label className="small muted">Confirm new password
-                <input type="password" autoComplete="new-password" value={confirmPw}
-                       onChange={(e) => setConfirmPw(e.target.value)}
-                       onKeyDown={(e) => { if (e.key === "Enter") changePassword(); }} />
+                <PasswordInput value={confirmPw} onChange={setConfirmPw} autoComplete="new-password" />
               </label>
               <div className="btnrow">
-                <button onClick={changePassword} disabled={pwBusy || !curPw || !newPw || !confirmPw}>
+                <button
+                  type="submit"
+                  disabled={pwBusy || !curPw || !newPw || !confirmPw}
+                  title={!curPw || !newPw || !confirmPw ? "Fill in all three fields" : undefined}
+                >
                   {pwBusy ? "Changing…" : "Change password"}
                 </button>
                 {pwMsg && (
-                  <span className="small" style={{ color: pwMsg.ok ? "var(--green)" : "var(--red)" }}>
+                  <span
+                    className="small"
+                    role={pwMsg.ok ? "status" : "alert"}
+                    style={{ color: pwMsg.ok ? "var(--green)" : "var(--red)" }}
+                  >
                     {pwMsg.text}
                   </span>
                 )}
@@ -202,7 +317,7 @@ export default function SettingsPage() {
                 signed in — tokens stay valid until they expire. To force every session
                 off immediately, rotate <span className="mono">JWT_SECRET</span> on the server.
               </div>
-            </div>
+            </form>
           </div>
         </div>
 

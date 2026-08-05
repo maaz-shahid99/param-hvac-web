@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
+import { copyText } from "../components/Cards";
 
 export default function MembersPage() {
   const { isAdmin, profile } = useAuth();
@@ -10,13 +11,20 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  async function load() {
+  // `busy` blocks double-submits: approve/reject/toggle had no guard at all, so
+  // the row stayed live through the mutation AND the reload that follows it.
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function load(showSpinner = false) {
+    if (showSpinner) setLoading(true);
     try {
       const r = await api.members("all");
       setMembers(r.members || []);
       setErr(null);
     } catch (e: any) {
-      setErr(e.message || "Could not load members.");
+      setErr(e?.message || "Could not load members.");
     } finally {
       setLoading(false);
     }
@@ -26,12 +34,35 @@ export default function MembersPage() {
     load();
   }, []);
 
-  async function guard(fn: () => Promise<any>) {
+  async function guard(fn: () => Promise<any>, okText?: string) {
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
     try {
       await fn();
       await load();
+      if (okText) {
+        setMsg({ ok: true, text: okText });
+        setTimeout(() => setMsg(null), 2500);
+      }
     } catch (e: any) {
-      alert(e.message || "Failed");
+      // Was a blocking native alert() that said "Failed" with no context.
+      setMsg({ ok: false, text: e?.message || "That action failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Uses the shared copyText helper — navigator.clipboard is undefined on this
+   *  appliance's plain-http origin, so the modern API alone silently no-ops. */
+  async function copyCode() {
+    const code = profile?.org_code || "";
+    if (!code) return;
+    if (await copyText(code)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      setMsg({ ok: false, text: `Couldn't copy automatically — the code is ${code}` });
     }
   }
 
@@ -41,10 +72,18 @@ export default function MembersPage() {
   return (
     <>
       <PageHeader title="Members">
-        <button className="secondary" onClick={load}><Icon name="refresh" size={17} /> Refresh</button>
+        {/* showSpinner: Refresh used to produce no visible change at all. */}
+        <button className="secondary" disabled={loading || busy} onClick={() => load(true)}>
+          <Icon name="refresh" size={17} /> {loading ? "Refreshing…" : "Refresh"}
+        </button>
       </PageHeader>
       <div className="page">
-        {err && <div className="error">{err}</div>}
+        {err && <div className="error" role="alert">{err}</div>}
+        {msg && (
+          <div className={msg.ok ? "success" : "error"} role={msg.ok ? "status" : "alert"}>
+            {msg.text}
+          </div>
+        )}
 
         {isAdmin && (
           <div className="card">
@@ -53,13 +92,8 @@ export default function MembersPage() {
               <span className="mono" style={{ fontSize: 18, letterSpacing: 2 }}>
                 {profile?.org_code || "—"}
               </span>
-              <button
-                className="ghost"
-                onClick={() => {
-                  navigator.clipboard?.writeText(profile?.org_code || "");
-                }}
-              >
-                <Icon name="content_copy" size={16} /> Copy
+              <button className="ghost" onClick={copyCode}>
+                <Icon name="content_copy" size={16} /> {copied ? "Copied!" : "Copy"}
               </button>
             </div>
             <div className="bd small muted">Share this code so members can request to join.</div>
@@ -80,10 +114,25 @@ export default function MembersPage() {
                       <div className="small muted">{m.email}{m.phone ? ` · ${m.phone}` : ""}</div>
                     </div>
                     <div className="btnrow">
-                      <button className="secondary" onClick={() => guard(() => api.rejectMember(m.id))}>
+                      {/* Reject is irreversible for the applicant and sat one
+                          click away from Approve with no confirmation. */}
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          const who = m.name || m.email;
+                          if (!confirm(`Reject ${who}'s request to join? They will not be able to sign in.`)) return;
+                          guard(() => api.rejectMember(m.id), `Rejected ${who}.`);
+                        }}
+                      >
                         <Icon name="close" size={16} /> Reject
                       </button>
-                      <button onClick={() => guard(() => api.approveMember(m.id))}><Icon name="check" size={16} /> Approve</button>
+                      <button
+                        disabled={busy}
+                        onClick={() => guard(() => api.approveMember(m.id), `Approved ${m.name || m.email}.`)}
+                      >
+                        <Icon name="check" size={16} /> Approve
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -113,6 +162,7 @@ export default function MembersPage() {
                         label="SMS"
                         on={m.sms_enabled}
                         disabled={!m.phone}
+                        reason="no phone number on this account"
                         onClick={() => guard(() => api.setMemberNotify(m.id, { sms_enabled: !m.sms_enabled }))}
                       />
                       {/* The server has always accepted a role change here; it was
@@ -135,6 +185,25 @@ export default function MembersPage() {
                         <Icon name={m.role === "admin" ? "person_remove" : "shield_person"} size={16} />
                         {m.role === "admin" ? "Make member" : "Make admin"}
                       </button>
+                      {/* Removing an approved member wasn't possible at all —
+                          someone who left the company kept their login and kept
+                          receiving alerts. */}
+                      <button
+                        className="ghost"
+                        disabled={busy}
+                        title="Remove this member from the organization"
+                        onClick={() => {
+                          const who = m.name || m.email;
+                          if (!confirm(
+                            `Remove ${who} from the organization?\n\n` +
+                            `They will no longer be able to sign in and will stop receiving alerts. ` +
+                            `They can request to join again later.`
+                          )) return;
+                          guard(() => api.removeMember(m.id), `Removed ${who}.`);
+                        }}
+                      >
+                        <Icon name="delete" size={16} /> Remove
+                      </button>
                     </div>
                   ) : (
                     <div className="btnrow">
@@ -153,23 +222,42 @@ export default function MembersPage() {
   );
 }
 
+/**
+ * Alert-delivery switch.
+ *
+ * Was a <div onClick> with no tabIndex, no role and no keyboard handler — so the
+ * primary control on this page could not be reached by Tab, activated by
+ * Space/Enter, or announced by a screen reader at all. A real <button
+ * role="switch"> gets all three for free, plus a focus ring.
+ *
+ * `disabled` also carries a reason: pointer-events:none used to swallow the
+ * parent's tooltip, so a greyed-out SMS toggle was unexplained.
+ */
 function Toggle({
   label,
   on,
   disabled,
+  reason,
   onClick,
 }: {
   label: string;
   on: boolean;
   disabled?: boolean;
+  reason?: string;
   onClick: () => void;
 }) {
+  const why = disabled ? reason || "Not available" : undefined;
   return (
-    <div className="toggle" title={disabled ? "No phone number" : ""}>
-      <span className="small muted">{label}</span>
-      <div
+    <div className="toggle">
+      <span className="small muted" aria-hidden="true">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={`${label} alerts${why ? ` — ${why}` : ""}`}
+        title={why}
+        disabled={disabled}
         className={`switchbtn ${on ? "on" : ""}`}
-        style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? "none" : "auto" }}
         onClick={onClick}
       />
     </div>

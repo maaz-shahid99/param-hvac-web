@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 import Icon from "./Icon";
@@ -45,11 +46,7 @@ export default function OtaBanner() {
     }
   }, [status]);
 
-  useEffect(() => {
-    poll();
-    const t = setInterval(poll, 60_000);
-    return () => clearInterval(t);
-  }, [poll]);
+  usePoll(poll, 60000);
 
   async function approve(u: Update) {
     setBusy((b) => new Set(b).add(u.kind));

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api } from "../api";
 import Fan from "../components/Fan";
 import { isOnline, tempColor, naturalCompare, portRank } from "../components/Cards";
@@ -34,11 +35,7 @@ export default function VisualizationPage() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 10000);
 
   function portView(port: any) {
     const eui = (port.assignedEui || "").toLowerCase();

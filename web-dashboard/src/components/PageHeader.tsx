@@ -1,33 +1,49 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { usePoll } from "../usePoll";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Icon from "./Icon";
+import { useNavDrawer } from "./Layout";
 
 function NotificationBell() {
-  const [count, setCount] = useState(0);
+  // `null` means "we don't know yet / the last fetch failed" — deliberately NOT
+  // 0. Swallowing the error and leaving the count at 0 rendered a calm grey bell
+  // labelled "No open alerts", so a broken API was indistinguishable from a
+  // healthy site. On an alarm product that is the worst possible failure mode.
+  const [count, setCount] = useState<number | null>(null);
   const nav = useNavigate();
-  useEffect(() => {
-    const f = async () => {
-      try {
-        const r = await api.alerts("open");
-        setCount((r.alerts || []).filter((a: any) => a.state !== "cleared").length);
-      } catch {/* */}
-    };
-    f();
-    const id = setInterval(f, 10000);
-    return () => clearInterval(id);
-  }, []);
-  const label = count > 0 ? `${count} open alert${count === 1 ? "" : "s"}` : "No open alerts";
+  // PageHeader renders on every page, so this poller runs constantly and stacks
+  // with each page's own. usePoll pauses it while the tab is hidden.
+  usePoll(async () => {
+    try {
+      const r = await api.alerts("open");
+      setCount((r.alerts || []).filter((a: any) => a.state !== "cleared").length);
+    } catch {
+      setCount(null);
+    }
+  }, 10000);
+  const unknown = count === null;
+  const active = !unknown && count > 0;
+  const label = unknown
+    ? "Alert status unavailable — could not reach the server"
+    : active
+      ? `${count} open alert${count === 1 ? "" : "s"}`
+      : "No open alerts";
   return (
     <button
-      className={`bell${count > 0 ? " has-alerts" : ""}`}
+      className={`bell${active ? " has-alerts" : ""}${unknown ? " unknown" : ""}`}
       title={label}
       aria-label={label}
       onClick={() => nav("/alerts")}
     >
-      <Icon name={count > 0 ? "notifications_active" : "notifications"} size={20} fill={count > 0} />
-      {count > 0 && <span className="bell-count">{count}</span>}
+      <Icon
+        name={unknown ? "notifications_paused" : active ? "notifications_active" : "notifications"}
+        size={20}
+        fill={active}
+      />
+      {active && <span className="bell-count">{count}</span>}
+      {unknown && <span className="bell-count">?</span>}
     </button>
   );
 }
@@ -42,12 +58,19 @@ export default function PageHeader({
   children?: ReactNode;
 }) {
   const { profile } = useAuth();
+  const { open: openNav } = useNavDrawer();
   const initial = (profile?.name || profile?.email || "?").trim().charAt(0).toUpperCase();
   return (
     <div className="topbar">
       <div className="topbar-title">
-        <div className="crumb">HVAC Monitor</div>
-        <h1>{title}</h1>
+        {/* Hidden above the mobile breakpoint by CSS. */}
+        <button className="navtoggle" aria-label="Open the navigation menu" onClick={openNav}>
+          <Icon name="menu" size={22} />
+        </button>
+        <div>
+          <div className="crumb">HVAC Monitor</div>
+          <h1>{title}</h1>
+        </div>
       </div>
       <div className="topbar-actions">
         {children}
