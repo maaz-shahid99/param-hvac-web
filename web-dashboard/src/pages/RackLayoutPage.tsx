@@ -114,7 +114,6 @@ export default function RackLayoutPage() {
     setAssignPort(null);
   };
 
-  if (loading) return <div className="center-msg">Loading…</div>;
 
   return (
     <>
@@ -127,6 +126,10 @@ export default function RackLayoutPage() {
         )}
       </PageHeader>
       <div className="page">
+        {/* Rendered inside the layout: the old early return replaced the
+            whole screen, so the top bar and alert bell vanished on every
+            navigation to this page. */}
+        {loading && <div className="center-msg">Loading…</div>}
         {err && <div className="error">{err}</div>}
         {!isAdmin && <div className="bd muted">Read-only — only admins can edit the layout.</div>}
         {racks.length === 0 && <div className="card"><div className="bd muted">No racks yet. {isAdmin ? "Add one to start." : ""}</div></div>}

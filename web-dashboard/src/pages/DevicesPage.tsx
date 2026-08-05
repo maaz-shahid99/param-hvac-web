@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api, autoName } from "../api";
 import { ago, isOnline, nowSec } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
@@ -85,11 +86,7 @@ export default function DevicesPage() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 10000);
 
   async function rename(eui: string, kind: string, role: string, current: string) {
     const name = window.prompt("Device name", current);

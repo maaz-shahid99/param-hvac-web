@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { usePoll } from "../usePoll";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -12,19 +13,16 @@ function NotificationBell() {
   // healthy site. On an alarm product that is the worst possible failure mode.
   const [count, setCount] = useState<number | null>(null);
   const nav = useNavigate();
-  useEffect(() => {
-    const f = async () => {
-      try {
-        const r = await api.alerts("open");
-        setCount((r.alerts || []).filter((a: any) => a.state !== "cleared").length);
-      } catch {
-        setCount(null);
-      }
-    };
-    f();
-    const id = setInterval(f, 10000);
-    return () => clearInterval(id);
-  }, []);
+  // PageHeader renders on every page, so this poller runs constantly and stacks
+  // with each page's own. usePoll pauses it while the tab is hidden.
+  usePoll(async () => {
+    try {
+      const r = await api.alerts("open");
+      setCount((r.alerts || []).filter((a: any) => a.state !== "cleared").length);
+    } catch {
+      setCount(null);
+    }
+  }, 10000);
   const unknown = count === null;
   const active = !unknown && count > 0;
   const label = unknown

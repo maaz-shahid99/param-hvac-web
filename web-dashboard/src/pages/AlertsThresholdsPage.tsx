@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { AlertsCard, LiveTempsCard, tenantHighLimit, copyText } from "../components/Cards";
@@ -58,11 +59,8 @@ export default function AlertsThresholdsPage() {
     }
   }
 
-  useEffect(() => {
-    refresh(true);
-    const id = setInterval(() => refresh(false), 10000);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => { refresh(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  usePoll(() => refresh(false), 10000);
 
   // Admin-only; a member gets 403 and simply sees no banner.
   useEffect(() => {
@@ -156,7 +154,6 @@ export default function AlertsThresholdsPage() {
     }
   };
 
-  if (loading) return <div className="center-msg">Loading…</div>;
 
   return (
     <>
@@ -166,6 +163,10 @@ export default function AlertsThresholdsPage() {
         <button className="secondary" onClick={() => refresh(false)}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
       <div className="page">
+        {/* Rendered inside the layout: the old early return replaced the
+            whole screen, so the top bar and alert bell vanished on every
+            navigation to this page. */}
+        {loading && <div className="center-msg">Loading…</div>}
         {err && <div className="error" role="alert">{err}</div>}
         {saved && (
           <div className={saved.ok ? "success" : "error"} role={saved.ok ? "status" : "alert"}>

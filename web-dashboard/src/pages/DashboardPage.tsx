@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api } from "../api";
 import { AlertsCard, LiveTempsCard, isOnline, tenantHighLimit, num } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
@@ -28,11 +29,7 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 10000);
 
   const ack = async (id: string) => {
     try { await api.ackAlert(id); refresh(); } catch {/* */}
@@ -47,7 +44,6 @@ export default function DashboardPage() {
     .reduce((m, s) => Math.max(m, +s.max_c || 0), 0);
   const top = alerts[0];
 
-  if (loading) return <div className="center-msg">Loading…</div>;
 
   return (
     <>
@@ -55,10 +51,15 @@ export default function DashboardPage() {
         <button className="secondary" onClick={refresh}>Refresh</button>
       </PageHeader>
       <div className="page">
-        {err && <div className="error">{err}</div>}
+        {err && <div className="error" role="alert">{err}</div>}
+
+        {/* Loading now renders INSIDE the layout. The old early return replaced
+            the whole screen, so PageHeader — and with it the alert bell — vanished
+            on every navigation to the dashboard. */}
+        {loading && <div className="center-msg">Loading…</div>}
 
         {/* Hero — emergency when there are open alerts, calm otherwise */}
-        {top ? (
+        {!loading && (top ? (
           <div className="hero">
             <h3 className="hd-ico"><Icon name="warning" size={24} fill /> {top.kind === "stale" ? "Sensor offline" : top.kind === "delta" ? "High ΔT" : "High temperature"}</h3>
             <div className="sub">{top.location || "Unmapped"}{alerts.length > 1 ? ` · +${alerts.length - 1} more open` : ""}</div>
@@ -73,7 +74,7 @@ export default function DashboardPage() {
             <h3 className="hd-ico"><Icon name="task_alt" size={24} fill /> All clear</h3>
             <div className="sub">No open alerts — every rack is within limits.</div>
           </div>
-        )}
+        ))}
 
         {/* Daily insights tiles */}
         <div className="stats">

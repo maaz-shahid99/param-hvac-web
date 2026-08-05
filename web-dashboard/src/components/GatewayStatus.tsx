@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api } from "../api";
 import { ago, nowSec } from "./Cards";
 import Icon from "./Icon";
@@ -29,11 +30,7 @@ export default function GatewayStatus() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 10000);
 
   const lastUsed = keys.reduce((m, k) => Math.max(m, Number(k.last_used_at) || 0), 0);
   const everUsed = lastUsed > 0;

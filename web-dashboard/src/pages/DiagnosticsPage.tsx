@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePoll } from "../usePoll";
 import { api, autoName, downloadCsv } from "../api";
 import { ago, nowSec } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
@@ -32,6 +33,9 @@ function crashLabel(eui: string, known: Record<string, { name?: string; kind?: s
 
 export default function DiagnosticsPage() {
   const [crashes, setCrashes] = useState<Crash[]>([]);
+  // Distinguishes "nothing to show" from "haven't asked yet" — the empty
+  // state used to be asserted as fact during the very first fetch.
+  const [loaded, setLoaded] = useState(false);
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const [known, setKnown] = useState<Record<string, { name?: string; kind?: string }>>({});
   const [err, setErr] = useState<string | null>(null);
@@ -40,7 +44,8 @@ export default function DiagnosticsPage() {
 
   async function refresh() {
     try { setCrashes((await api.crashes()).crashes || []); setErr(null); }
-    catch (e: any) { setErr(e.message); }
+    catch (e: any) { setErr(e?.message || "Could not load crash reports."); }
+    finally { setLoaded(true); }
     try { setFleet(((await api.fleet()) as { fleet: Fleet | null }).fleet); } catch { /* older server */ }
     // Best-effort identity lookup; a failure here only costs us nicer labels.
     try {
@@ -57,11 +62,7 @@ export default function DiagnosticsPage() {
       setKnown(map);
     } catch { /* labels degrade to Device-XXXX */ }
   }
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 30000);
-    return () => clearInterval(id);
-  }, []);
+  usePoll(refresh, 30000);
 
   const dl = async () => {
     setBusy(true);
@@ -101,7 +102,9 @@ export default function DiagnosticsPage() {
         )}
         <div className="card">
           <div className="hd hd-ico"><Icon name="bug_report" size={18} /> Firmware crash reports ({crashes.length})</div>
-          {crashes.length === 0 ? (
+          {!loaded ? (
+            <div className="bd muted">Loading crash reports…</div>
+          ) : crashes.length === 0 ? (
             <div className="bd muted">No crashes reported.</div>
           ) : crashes.map((c) => (
             <div key={c.id}>
