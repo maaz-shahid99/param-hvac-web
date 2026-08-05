@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
+import { copyText } from "../components/Cards";
 
 export default function MembersPage() {
   const { isAdmin, profile } = useAuth();
@@ -52,33 +53,12 @@ export default function MembersPage() {
     }
   }
 
-  /** navigator.clipboard is undefined on an insecure origin — which is exactly
-   *  how this appliance is served (plain http). The optional-chained call simply
-   *  no-opped, so Copy did nothing and said nothing. */
+  /** Uses the shared copyText helper — navigator.clipboard is undefined on this
+   *  appliance's plain-http origin, so the modern API alone silently no-ops. */
   async function copyCode() {
     const code = profile?.org_code || "";
     if (!code) return;
-    let ok = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
-        ok = true;
-      }
-    } catch { /* fall through to the legacy path */ }
-    if (!ok) {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = code;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-      } catch { ok = false; }
-    }
-    if (ok) {
+    if (await copyText(code)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } else {

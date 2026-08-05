@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { AlertsCard, LiveTempsCard, tenantHighLimit } from "../components/Cards";
+import { AlertsCard, LiveTempsCard, tenantHighLimit, copyText } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -17,7 +17,25 @@ export default function AlertsThresholdsPage() {
   const [effHigh, setEffHigh] = useState(40);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  // Success and failure used to share one grey `savedMsg` span, so a failed save
+  // was easily read as a successful one.
+  const [saved, setSaved] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Minted gateway key, shown in-page instead of a window.prompt.
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  // Recipients editor.
+  const [recipOpen, setRecipOpen] = useState(false);
+  const [recipLoading, setRecipLoading] = useState(false);
+  const [recipSaving, setRecipSaving] = useState(false);
+  const [recipEmails, setRecipEmails] = useState("");
+  const [recipPhones, setRecipPhones] = useState("");
+  const [recipEffective, setRecipEffective] = useState<string[]>([]);
+
+  // Delivery channel, so the page can say when alerts are only being logged.
+  const [delivery, setDelivery] = useState<any>(null);
 
   async function refresh(initial = false) {
     try {
@@ -46,41 +64,95 @@ export default function AlertsThresholdsPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Admin-only; a member gets 403 and simply sees no banner.
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.notificationsStatus().then(setDelivery).catch(() => setDelivery(null));
+  }, [isAdmin]);
+
   const ack = async (id: string) => {
+    setSaved(null);
     try {
       await api.ackAlert(id);
       refresh(false);
-    } catch {/* */}
+    } catch (e: any) {
+      // Was swallowed: clicking ACK on a failure did nothing at all, so the user
+      // clicked again and assumed it had worked.
+      setSaved({ ok: false, text: e?.message || "Could not acknowledge that alert." });
+    }
   };
 
   const save = async () => {
-    setSavedMsg(null);
+    setSaved(null);
+    // Plain text inputs with no validation: Number("4o") is NaN, which
+    // JSON.stringify turns into null — silently clearing the limit that governs
+    // when the alarm fires.
+    const h = Number(high), d = Number(delta);
+    if (!Number.isFinite(h) || !Number.isFinite(d)) {
+      setSaved({ ok: false, text: "Both limits must be numbers." });
+      return;
+    }
+    if (h < -50 || h > 150 || d < 0 || d > 150) {
+      setSaved({ ok: false, text: "High limit must be −50…150 °C and ΔT 0…150 °C." });
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
     try {
-      await api.putThreshold({ scope: "tenant", high_c: Number(high), delta_c: Number(delta) });
-      setSavedMsg("Thresholds saved.");
+      await api.putThreshold({ scope: "tenant", high_c: h, delta_c: d });
+      setSaved({ ok: true, text: "Thresholds saved." });
+      refresh(false); // pull back the value the card colours against
     } catch (e: any) {
-      setSavedMsg(e.message || "Save failed.");
+      setSaved({ ok: false, text: e?.message || "Could not save the thresholds." });
+    } finally {
+      setSaving(false);
     }
   };
 
+  /** Mint a key and show it IN the page. A window.prompt truncates it, offers no
+   *  copy button, and is suppressed outright once the browser's "prevent
+   *  additional dialogs" is ticked — destroying a key that is only shown once. */
   const genKey = async () => {
+    setSaved(null);
     try {
       const r = await api.createApiKey("gateway");
-      window.prompt("Gateway API key — provision this into the gateway (shown once):", r.api_key);
+      setNewKey(r.api_key);
     } catch (e: any) {
-      alert(e.message || "Failed");
+      setSaved({ ok: false, text: e?.message || "Could not create an API key." });
     }
   };
 
-  const setRecipients = async () => {
-    const emails = window.prompt("Extra alert emails (comma-separated)", "");
-    if (emails === null) return;
-    const phones = window.prompt("Extra alert phones (comma-separated)", "") || "";
+  /** Load the CURRENT recipients before editing. The old flow opened two blank
+   *  prompts and saved whatever was in them, so pressing OK deleted every
+   *  configured alert email. */
+  const openRecipients = async () => {
+    setSaved(null);
+    setRecipOpen(true);
+    setRecipLoading(true);
     try {
-      await api.setRecipients({ alert_emails: emails, alert_phones: phones });
-      alert("Recipients saved.");
+      const r = await api.recipients();
+      setRecipEmails(r.alert_emails || "");
+      setRecipPhones(r.alert_phones || "");
+      setRecipEffective(r.effective_emails || []);
     } catch (e: any) {
-      alert(e.message || "Failed");
+      setSaved({ ok: false, text: e?.message || "Could not load the current recipients." });
+      setRecipOpen(false);
+    } finally {
+      setRecipLoading(false);
+    }
+  };
+
+  const saveRecipients = async () => {
+    if (recipSaving) return;
+    setRecipSaving(true);
+    try {
+      await api.setRecipients({ alert_emails: recipEmails, alert_phones: recipPhones });
+      setRecipOpen(false);
+      setSaved({ ok: true, text: "Alert recipients saved." });
+    } catch (e: any) {
+      setSaved({ ok: false, text: e?.message || "Could not save the recipients." });
+    } finally {
+      setRecipSaving(false);
     }
   };
 
@@ -90,11 +162,100 @@ export default function AlertsThresholdsPage() {
     <>
       <PageHeader title="Alerts & Thresholds">
         {isAdmin && <button className="secondary" onClick={genKey}><Icon name="vpn_key" size={17} /> Gateway API key</button>}
-        {isAdmin && <button className="secondary" onClick={setRecipients}><Icon name="group" size={17} /> Recipients</button>}
+        {isAdmin && <button className="secondary" onClick={openRecipients}><Icon name="group" size={17} /> Recipients</button>}
         <button className="secondary" onClick={() => refresh(false)}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
       <div className="page">
-        {err && <div className="error">{err}</div>}
+        {err && <div className="error" role="alert">{err}</div>}
+        {saved && (
+          <div className={saved.ok ? "success" : "error"} role={saved.ok ? "status" : "alert"}>
+            {saved.text}
+          </div>
+        )}
+
+        {/* Alerts that only reach a log file are worse than no alerts, because
+            they look like coverage. Say so plainly. */}
+        {isAdmin && delivery && !delivery.email_configured && (
+          <div className="error" role="alert">
+            <b>Alerts are not being emailed.</b> No SES or SMTP is configured on the server,
+            so every alert is written to the server log only. Set <span className="mono">SMTP_HOST</span>,{" "}
+            <span className="mono">SMTP_USER</span> and <span className="mono">SMTP_PASS</span> in the
+            server's <span className="mono">.env</span>, then use <b>Settings → Send test email</b> to confirm.
+          </div>
+        )}
+
+        {/* The minted key is shown once by the server; keep it on the page with a
+            copy button rather than in a dialog the browser can suppress. */}
+        {newKey && (
+          <div className="card" style={{ borderColor: "var(--accent)" }}>
+            <div className="hd hd-ico"><Icon name="vpn_key" size={18} /> New gateway API key</div>
+            <div className="bd">
+              <p className="small muted" style={{ marginTop: 0 }}>
+                Shown <b>once</b> — copy it now and provision it into the gateway. If you lose it
+                you'll have to mint another.
+              </p>
+              <div className="btnrow">
+                <code
+                  className="mono"
+                  style={{
+                    flex: 1, minWidth: 0, overflowX: "auto", padding: "10px 12px",
+                    background: "var(--surface-2)", border: "1px solid var(--border-strong)",
+                    borderRadius: "var(--radius-sm)", whiteSpace: "nowrap",
+                  }}
+                >
+                  {newKey}
+                </code>
+                <button
+                  onClick={async () => {
+                    const ok = await copyText(newKey);
+                    setKeyCopied(ok);
+                    if (ok) setTimeout(() => setKeyCopied(false), 2000);
+                  }}
+                >
+                  <Icon name="content_copy" size={16} /> {keyCopied ? "Copied!" : "Copy"}
+                </button>
+                <button className="secondary" onClick={() => setNewKey(null)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recipients editor — prefilled from the server so saving can no longer
+            wipe the list. */}
+        {recipOpen && (
+          <div className="card">
+            <div className="hd hd-ico"><Icon name="group" size={18} /> Extra alert recipients</div>
+            <div className="bd">
+              {recipLoading ? (
+                <div className="muted">Loading current recipients…</div>
+              ) : (
+                <>
+                  <p className="small muted" style={{ marginTop: 0 }}>
+                    Comma-separated, in addition to opted-in members.
+                    {recipEffective.length > 0 && (
+                      <> Currently notified: <b>{recipEffective.join(", ")}</b>.</>
+                    )}
+                  </p>
+                  <label>Extra emails</label>
+                  <input value={recipEmails} onChange={(e) => setRecipEmails(e.target.value)}
+                         placeholder="ops@example.com, oncall@example.com" />
+                  <label>Extra phone numbers</label>
+                  <input value={recipPhones} onChange={(e) => setRecipPhones(e.target.value)}
+                         placeholder="+15551234567, +15559876543" />
+                  <div className="btnrow" style={{ marginTop: 14 }}>
+                    <button onClick={saveRecipients} disabled={recipSaving}>
+                      {recipSaving ? "Saving…" : "Save recipients"}
+                    </button>
+                    <button className="secondary" onClick={() => setRecipOpen(false)} disabled={recipSaving}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <AlertsCard alerts={alerts} onAck={ack} />
 
         <div className="card">
@@ -103,19 +264,24 @@ export default function AlertsThresholdsPage() {
             <div className="small muted">
               Applied to every rack unless overridden. Defaults: {defs.high_c}°C / Δ{defs.delta_c}°C.
             </div>
-            <div style={{ display: "flex", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <label>High temp °C</label>
-                <input value={high} disabled={!isAdmin} onChange={(e) => setHigh(e.target.value)} />
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <label htmlFor="thr-high">High temp °C</label>
+                {/* type=number + bounds: these were plain text, so "4o" became
+                    NaN and serialised to null, clearing the limit entirely. */}
+                <input id="thr-high" type="number" step="0.1" min={-50} max={150}
+                       value={high} disabled={!isAdmin} onChange={(e) => setHigh(e.target.value)} />
               </div>
-              <div style={{ flex: 1 }}>
-                <label>Max ΔT °C</label>
-                <input value={delta} disabled={!isAdmin} onChange={(e) => setDelta(e.target.value)} />
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <label htmlFor="thr-delta">Max ΔT °C</label>
+                <input id="thr-delta" type="number" step="0.1" min={0} max={150}
+                       value={delta} disabled={!isAdmin} onChange={(e) => setDelta(e.target.value)} />
               </div>
             </div>
             <div style={{ marginTop: 14 }} className="btnrow">
-              <button disabled={!isAdmin} onClick={save}>{isAdmin ? "Save" : "Admins only"}</button>
-              {savedMsg && <span className="small muted">{savedMsg}</span>}
+              <button disabled={!isAdmin || saving} onClick={save}>
+                {!isAdmin ? "Admins only" : saving ? "Saving…" : "Save"}
+              </button>
             </div>
           </div>
         </div>

@@ -19,6 +19,37 @@ export function isOnline(ts: number) {
 }
 
 /**
+ * Copy text to the clipboard, with a fallback for insecure origins.
+ *
+ * `navigator.clipboard` is undefined unless the page is a secure context, and
+ * this appliance is served over plain http — so the modern API silently isn't
+ * there. Returns whether the copy actually happened, so the caller can confirm
+ * or fall back to showing the value.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Format a number that came from unvalidated JSON. Returns an em dash rather
  * than "NaN" or throwing, so a null reading degrades to "—" instead of taking
  * the page down (a bare `.toFixed()` on a null threw a TypeError, and with no

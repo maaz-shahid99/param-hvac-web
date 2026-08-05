@@ -82,6 +82,33 @@ export default function SettingsPage() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // Email/SMS delivery channel. notify_email falls through SES -> SMTP -> log and
+  // never raises, so a server with no mail configured looks perfectly healthy
+  // while every alert it "sends" only reaches a log file.
+  const [delivery, setDelivery] = useState<any>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.notificationsStatus().then(setDelivery).catch(() => setDelivery(null));
+  }, [isAdmin]);
+  const sendTest = async () => {
+    if (testBusy) return;
+    setTestBusy(true);
+    setTestMsg(null);
+    try {
+      const r = await api.sendTestNotification();
+      setTestMsg({
+        ok: !!r.ok,
+        text: r.ok ? `${r.detail} Check ${r.sent_to}.` : r.detail,
+      });
+    } catch (e: any) {
+      setTestMsg({ ok: false, text: e?.message || "Could not send the test email." });
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveErr, setLeaveErr] = useState<string | null>(null);
   const leaveOrg = async () => {
@@ -204,6 +231,47 @@ export default function SettingsPage() {
           </div>
           {leaveErr && <div className="bd"><span className="small" style={{ color: "var(--red)" }}>{leaveErr}</span></div>}
         </div>
+
+        {isAdmin && delivery && (
+          <div className="card">
+            <div className="hd hd-ico"><Icon name="outgoing_mail" size={18} /> Alert delivery</div>
+            <div className="bd">
+              {delivery.email_configured ? (
+                <p className="small" style={{ marginTop: 0 }}>
+                  Email alerts are sent via <b>{delivery.email === "ses" ? "AWS SES" : `SMTP (${delivery.smtp_host})`}</b>
+                  {delivery.email_from ? <> from <span className="mono">{delivery.email_from}</span></> : null}.
+                </p>
+              ) : (
+                <p className="small" style={{ marginTop: 0, color: "var(--red)" }}>
+                  <b>Alerts are not being emailed.</b> No SES or SMTP is configured, so every alert is
+                  written to the server log only. Set <span className="mono">SMTP_HOST</span>,{" "}
+                  <span className="mono">SMTP_USER</span>, <span className="mono">SMTP_PASS</span> and{" "}
+                  <span className="mono">MAIL_FROM</span> in the server's <span className="mono">.env</span>,
+                  then restart and re-test.
+                </p>
+              )}
+              <p className="small muted">
+                SMS: {delivery.sms_configured
+                  ? <>sent via <b>{delivery.sms}</b>.</>
+                  : <>no SMS provider configured — SMS alerts are logged only, even for members who have SMS switched on.</>}
+              </p>
+              <div className="btnrow">
+                <button className="secondary" onClick={sendTest} disabled={testBusy}>
+                  <Icon name="send" size={16} /> {testBusy ? "Sending…" : "Send test email"}
+                </button>
+                {testMsg && (
+                  <span
+                    className="small"
+                    role={testMsg.ok ? "status" : "alert"}
+                    style={{ color: testMsg.ok ? "var(--green)" : "var(--red)" }}
+                  >
+                    {testMsg.text}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="card">
           <div className="hd hd-ico"><Icon name="lock" size={18} /> Change password</div>

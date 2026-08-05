@@ -149,8 +149,15 @@ export const api = {
   routers: () => req("/v1/routers"),
   alerts: (state = "open") => req(`/v1/alerts?state=${state}`),
   ackAlert: (id: string) => req(`/v1/alerts/${id}/ack`, { method: "POST" }),
+  /** Read the extra alert addresses so an editor can prefill instead of
+   *  overwriting blind (there was no GET, which is how the list got wiped). */
+  recipients: () => req("/v1/recipients"),
   setRecipients: (b: Record<string, unknown>) =>
     req("/v1/recipients", { method: "PUT", body: b }),
+
+  // Is alerting actually reaching anyone, or only being written to a log?
+  notificationsStatus: () => req("/v1/notifications/status"),
+  sendTestNotification: () => req("/v1/notifications/test", { method: "POST", body: {} }),
   createApiKey: (label: string) =>
     req("/v1/apikeys", { method: "POST", body: { label } }),
   apiKeys: () => req("/v1/apikeys"),

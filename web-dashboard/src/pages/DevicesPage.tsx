@@ -94,13 +94,24 @@ export default function DevicesPage() {
   async function rename(eui: string, kind: string, role: string, current: string) {
     const name = window.prompt("Device name", current);
     if (name == null) return;
-    try { await api.putDevices([{ eui, kind, role, name: name.trim() }]); refresh(); }
-    catch (e: any) { setErr(e.message); }
+    const clean = name.trim();
+    // `name.trim()` could be "" — which saved a blank label and left the row
+    // rendering nothing at all.
+    if (!clean) {
+      setErr("A device name can't be empty.");
+      return;
+    }
+    if (clean.length > 64) {
+      setErr("Device names are limited to 64 characters.");
+      return;
+    }
+    try { await api.putDevices([{ eui, kind, role, name: clean }]); refresh(); }
+    catch (e: any) { setErr(e?.message || "Could not rename that device."); }
   }
   async function remove(eui: string, label: string) {
     if (!window.confirm(`Remove "${label}" from the list?\n\nIt reappears automatically if it comes back online.`)) return;
     try { await api.deleteDevice(eui); refresh(); }
-    catch (e: any) { setErr(e.message); }
+    catch (e: any) { setErr(e?.message || "Could not remove that device."); }
   }
 
   const online = sensors.filter((r) => r.online).length;

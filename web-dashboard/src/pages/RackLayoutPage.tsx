@@ -62,12 +62,23 @@ export default function RackLayoutPage() {
   }
   useEffect(() => { load(); }, []);
 
+  /** Optimistic edit with ROLLBACK. Previously a failed save left the optimistic
+   *  state on screen and never reloaded, so the user saw the rack/unit/port they
+   *  had just created, believed it was persisted, navigated away — and lost it. */
   function mutate(fn: (r: Rack[]) => void) {
+    const prev: Rack[] = JSON.parse(JSON.stringify(racks));
     const next: Rack[] = JSON.parse(JSON.stringify(racks));
     fn(next);
     setRacks(next);
     setBusy(true);
-    api.putTopology({ racks: next }).catch((e: any) => setErr(e.message)).finally(() => setBusy(false));
+    setErr(null);
+    api
+      .putTopology({ racks: next })
+      .catch((e: any) => {
+        setRacks(prev); // put the layout back so the screen matches the server
+        setErr(`${e?.message || "Could not save the layout."} — your change was not applied.`);
+      })
+      .finally(() => setBusy(false));
   }
   const nextBox = () => {
     let m = 0;
@@ -127,7 +138,24 @@ export default function RackLayoutPage() {
               {isAdmin && (
                 <span className="btnrow">
                   <button className="iconbtn" title="Rename rack" onClick={() => { const n = ask("Rename rack", rack.name); if (n) mutate((r) => { const x = r.find((y) => y.id === rack.id); if (x) x.name = n.trim(); }); }}><Icon name="edit" size={18} /></button>
-                  <button className="iconbtn danger" title="Delete rack" onClick={() => { if (confirm(`Delete ${rack.name}?`)) mutate((r) => { const i = r.findIndex((y) => y.id === rack.id); if (i >= 0) r.splice(i, 1); }); }}><Icon name="delete" size={18} /></button>
+                  {/* Say what goes with it — "Delete Rack A?" hid the fact that
+                      every unit, port and sensor assignment goes too. */}
+                  <button
+                    className="iconbtn danger"
+                    title="Delete rack"
+                    aria-label={`Delete rack ${rack.name}`}
+                    onClick={() => {
+                      const nU = rack.units.length;
+                      const nP = rack.units.reduce((m, u) => m + u.ports.length, 0);
+                      const nA = rack.units.reduce((m, u) => m + u.ports.filter((p) => p.assignedEui).length, 0);
+                      if (!confirm(
+                        `Delete rack "${rack.name}"?\n\n` +
+                        `This also deletes ${nU} unit(s) and ${nP} port(s)` +
+                        (nA ? `, and unassigns ${nA} sensor probe(s) — alerts for those locations will stop.` : ".")
+                      )) return;
+                      mutate((r) => { const i = r.findIndex((y) => y.id === rack.id); if (i >= 0) r.splice(i, 1); });
+                    }}
+                  ><Icon name="delete" size={18} /></button>
                 </span>
               )}
             </div>
@@ -140,7 +168,20 @@ export default function RackLayoutPage() {
                     {isAdmin && (
                       <span className="btnrow">
                         <button className="iconbtn" title="Rename unit" onClick={() => { const n = ask("Rename unit", unit.name); if (n) mutate((r) => { const u = r.find((y) => y.id === rack.id)?.units.find((z) => z.id === unit.id); if (u) u.name = n.trim(); }); }}><Icon name="edit" size={16} /></button>
-                        <button className="iconbtn danger" title="Delete unit" onClick={() => { if (confirm(`Delete ${unit.name}?`)) mutate((r) => { const x = r.find((y) => y.id === rack.id); if (x) x.units = x.units.filter((z) => z.id !== unit.id); }); }}><Icon name="delete" size={16} /></button>
+                        <button
+                          className="iconbtn danger"
+                          title="Delete unit"
+                          aria-label={`Delete unit ${unit.name}`}
+                          onClick={() => {
+                            const nP = unit.ports.length;
+                            const nA = unit.ports.filter((p) => p.assignedEui).length;
+                            if (!confirm(
+                              `Delete unit "${unit.name}"?\n\nThis also deletes ${nP} port(s)` +
+                              (nA ? `, and unassigns ${nA} sensor probe(s) — alerts for those locations will stop.` : ".")
+                            )) return;
+                            mutate((r) => { const x = r.find((y) => y.id === rack.id); if (x) x.units = x.units.filter((z) => z.id !== unit.id); });
+                          }}
+                        ><Icon name="delete" size={16} /></button>
                       </span>
                     )}
                   </div>
@@ -167,9 +208,34 @@ export default function RackLayoutPage() {
                                 <Icon name="link" size={16} /> {port.assignedEui ? "Reassign" : "Assign"}
                               </button>
                               {port.assignedEui && (
-                                <button className="iconbtn" title="Unassign" onClick={() => mutate((r) => { const p = r.find((y) => y.id === rack.id)?.units.find((u) => u.id === unit.id)?.ports.find((q) => q.id === port.id); if (p) { p.assignedEui = null; p.assignedProbeRom = null; p.probeLabel = null; } })}><Icon name="link_off" size={18} /></button>
+                                <button
+                                  className="iconbtn"
+                                  title="Unassign"
+                                  aria-label={`Unassign the sensor from ${port.label}`}
+                                  onClick={() => {
+                                    // Unassigning breaks the sensor->location mapping
+                                    // that alerts depend on; it deserves a confirm too.
+                                    if (!confirm(`Unassign the sensor from "${port.label}"?\n\nAlerts for this location will stop until another probe is assigned.`)) return;
+                                    mutate((r) => { const p = r.find((y) => y.id === rack.id)?.units.find((u) => u.id === unit.id)?.ports.find((q) => q.id === port.id); if (p) { p.assignedEui = null; p.assignedProbeRom = null; p.probeLabel = null; } });
+                                  }}
+                                ><Icon name="link_off" size={18} /></button>
                               )}
-                              <button className="iconbtn danger" title="Delete port" onClick={() => mutate((r) => { const u = r.find((y) => y.id === rack.id)?.units.find((z) => z.id === unit.id); if (u) u.ports = u.ports.filter((q) => q.id !== port.id); })}><Icon name="delete" size={16} /></button>
+                              {/* This deleted immediately and saved, while the
+                                  identical-looking Delete rack/unit buttons beside
+                                  it both confirmed. It also destroys the port's
+                                  sensor assignment. */}
+                              <button
+                                className="iconbtn danger"
+                                title="Delete port"
+                                aria-label={`Delete port ${port.label}`}
+                                onClick={() => {
+                                  const assigned = port.assignedEui
+                                    ? "\n\nIts sensor assignment will be lost and alerts for this location will stop."
+                                    : "";
+                                  if (!confirm(`Delete port "${port.label}"?${assigned}`)) return;
+                                  mutate((r) => { const u = r.find((y) => y.id === rack.id)?.units.find((z) => z.id === unit.id); if (u) u.ports = u.ports.filter((q) => q.id !== port.id); });
+                                }}
+                              ><Icon name="delete" size={16} /></button>
                             </span>
                           )}
                         </div>
