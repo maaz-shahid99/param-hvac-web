@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import Fan from "../components/Fan";
-import { isOnline, tempColor } from "../components/Cards";
+import { isOnline, tempColor, naturalCompare, portRank } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -104,7 +104,17 @@ export default function VisualizationPage() {
                         {(u.ports || []).length === 0 ? (
                           <span className="small muted">no ports</span>
                         ) : (
-                          (u.ports || []).map((p: any) => portView(p))
+                          // Always render intake on the left and exhaust on the right,
+                          // regardless of the order the ports were created in, so the
+                          // rail reads the way the air actually flows.
+                          (u.ports || [])
+                            .slice()
+                            .sort(
+                              (a: any, b: any) =>
+                                portRank(a.type || a.label) - portRank(b.type || b.label) ||
+                                naturalCompare(a.label || "", b.label || "")
+                            )
+                            .map((p: any) => portView(p))
                         )}
                       </div>
                     </div>

@@ -18,6 +18,53 @@ export function isOnline(ts: number) {
   return nowSec() - ts < STALE_SECONDS;
 }
 
+// --- ordering helpers -------------------------------------------------------
+// Layout data is authored in creation order, which reads as random once a rack
+// has a few units. These give every list the same physical ordering: racks
+// alphabetically, units by number (Unit 2 before Unit 10, which a plain string
+// sort gets wrong), and intake before exhaust so airflow reads left-to-right.
+
+/** String compare that treats embedded digits as numbers: "Unit 2" < "Unit 10". */
+export function naturalCompare(a: string, b: string): number {
+  const ax = (a || "").toLowerCase().match(/(\d+|\D+)/g) || [];
+  const bx = (b || "").toLowerCase().match(/(\d+|\D+)/g) || [];
+  for (let i = 0; i < Math.max(ax.length, bx.length); i++) {
+    const x = ax[i], y = bx[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (/^\d/.test(x) && /^\d/.test(y)) {
+      const d = parseInt(x, 10) - parseInt(y, 10);
+      if (d) return d;
+    } else {
+      const c = x.localeCompare(y);
+      if (c) return c;
+    }
+  }
+  return 0;
+}
+
+/** Intake sorts before exhaust — air comes in, then goes out. */
+export function portRank(s: string): number {
+  return /exhaust/i.test(s || "") ? 1 : 0;
+}
+
+/** Order a "Rack / Unit 2 / Exhaust 1" location: rack alphabetical, unit by
+ *  number, then intake before exhaust. */
+export function compareLocation(a: string, b: string): number {
+  const A = (a || "").split("/").map((s) => s.trim());
+  const B = (b || "").split("/").map((s) => s.trim());
+  for (let i = 0; i < Math.max(A.length, B.length); i++) {
+    const x = A[i] ?? "", y = B[i] ?? "";
+    if (i === 2) {                       // the port segment
+      const r = portRank(x) - portRank(y);
+      if (r) return r;
+    }
+    const c = naturalCompare(x, y);
+    if (c) return c;
+  }
+  return 0;
+}
+
 // Temperature -> colour ramp (blue -> green -> amber -> red).
 export function tempColor(t: number): string {
   const stops: [number, [number, number, number]][] = [
