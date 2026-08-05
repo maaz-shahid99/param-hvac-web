@@ -11,6 +11,7 @@ export default function Icon({
   className = "",
   color,
   style,
+  label,
 }: {
   name: string;
   size?: number;
@@ -19,6 +20,13 @@ export default function Icon({
   className?: string;
   color?: string;
   style?: CSSProperties;
+  /**
+   * Accessible name, for when the icon IS the content — an icon-only button, say.
+   * Without this the span is aria-hidden and a button wrapping nothing else has
+   * no accessible name at all, so a screen reader announces only "button".
+   * Leave unset for decorative icons that sit beside real text.
+   */
+  label?: string;
 }) {
   const fvs = [
     `'opsz' ${size}`,
@@ -30,7 +38,10 @@ export default function Icon({
   return (
     <span
       className={`msym ${className}`}
-      aria-hidden="true"
+      // Decorative by default; when `label` is given the icon carries the name.
+      aria-hidden={label ? undefined : "true"}
+      role={label ? "img" : undefined}
+      aria-label={label}
       style={{ fontSize: size, color, fontVariationSettings: fvs, ...style }}
     >
       {name}

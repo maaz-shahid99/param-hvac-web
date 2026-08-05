@@ -162,6 +162,7 @@ export default function MembersPage() {
                         label="SMS"
                         on={m.sms_enabled}
                         disabled={!m.phone}
+                        reason="no phone number on this account"
                         onClick={() => guard(() => api.setMemberNotify(m.id, { sms_enabled: !m.sms_enabled }))}
                       />
                       {/* The server has always accepted a role change here; it was
@@ -202,23 +203,42 @@ export default function MembersPage() {
   );
 }
 
+/**
+ * Alert-delivery switch.
+ *
+ * Was a <div onClick> with no tabIndex, no role and no keyboard handler — so the
+ * primary control on this page could not be reached by Tab, activated by
+ * Space/Enter, or announced by a screen reader at all. A real <button
+ * role="switch"> gets all three for free, plus a focus ring.
+ *
+ * `disabled` also carries a reason: pointer-events:none used to swallow the
+ * parent's tooltip, so a greyed-out SMS toggle was unexplained.
+ */
 function Toggle({
   label,
   on,
   disabled,
+  reason,
   onClick,
 }: {
   label: string;
   on: boolean;
   disabled?: boolean;
+  reason?: string;
   onClick: () => void;
 }) {
+  const why = disabled ? reason || "Not available" : undefined;
   return (
-    <div className="toggle" title={disabled ? "No phone number" : ""}>
-      <span className="small muted">{label}</span>
-      <div
+    <div className="toggle">
+      <span className="small muted" aria-hidden="true">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={`${label} alerts${why ? ` — ${why}` : ""}`}
+        title={why}
+        disabled={disabled}
         className={`switchbtn ${on ? "on" : ""}`}
-        style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? "none" : "auto" }}
         onClick={onClick}
       />
     </div>

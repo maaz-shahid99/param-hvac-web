@@ -152,8 +152,8 @@ export default function DevicesPage() {
                   </div>
                   <div className="btnrow">
                     <span className={`badge ${d.online ? "green" : "grey"}`}>{d.online ? "ONLINE" : "OFFLINE"}</span>
-                    <button className="iconbtn" title="Rename" onClick={() => rename(d.eui, isGw ? "gateway" : "router", d.role, d.name)}><Icon name="edit" size={18} /></button>
-                    <button className="iconbtn" title="Remove" onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
+                    <button className="iconbtn" title="Rename" aria-label={`Rename ${d.name || d.eui}`} onClick={() => rename(d.eui, isGw ? "gateway" : "router", d.role, d.name)}><Icon name="edit" size={18} /></button>
+                    <button className="iconbtn" title="Remove" aria-label={`Remove ${d.name || d.eui} from the list`} onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
                   </div>
                 </div>
               );
@@ -183,8 +183,8 @@ export default function DevicesPage() {
                 </div>
                 <div className="btnrow">
                   <span className={`badge ${d.online ? "green" : "grey"}`}>{d.online ? "ONLINE" : "OFFLINE"}</span>
-                  <button className="iconbtn" title="Rename" onClick={() => rename(d.eui, "sensor", "", d.name)}><Icon name="edit" size={18} /></button>
-                  <button className="iconbtn" title="Remove" onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
+                  <button className="iconbtn" title="Rename" aria-label={`Rename ${d.name || d.eui}`} onClick={() => rename(d.eui, "sensor", "", d.name)}><Icon name="edit" size={18} /></button>
+                  <button className="iconbtn" title="Remove" aria-label={`Remove ${d.name || d.eui} from the list`} onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
                 </div>
               </div>
             ))

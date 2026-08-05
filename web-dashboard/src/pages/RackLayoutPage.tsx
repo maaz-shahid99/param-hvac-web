@@ -137,7 +137,7 @@ export default function RackLayoutPage() {
               <span className="hd-ico"><Icon name="dns" size={18} /> {rack.name}</span>
               {isAdmin && (
                 <span className="btnrow">
-                  <button className="iconbtn" title="Rename rack" onClick={() => { const n = ask("Rename rack", rack.name); if (n) mutate((r) => { const x = r.find((y) => y.id === rack.id); if (x) x.name = n.trim(); }); }}><Icon name="edit" size={18} /></button>
+                  <button className="iconbtn" title="Rename rack" aria-label={`Rename rack ${rack.name}`} onClick={() => { const n = ask("Rename rack", rack.name); if (n) mutate((r) => { const x = r.find((y) => y.id === rack.id); if (x) x.name = n.trim(); }); }}><Icon name="edit" size={18} /></button>
                   {/* Say what goes with it — "Delete Rack A?" hid the fact that
                       every unit, port and sensor assignment goes too. */}
                   <button
@@ -167,7 +167,7 @@ export default function RackLayoutPage() {
                     <span className="nm">{unit.name}</span>
                     {isAdmin && (
                       <span className="btnrow">
-                        <button className="iconbtn" title="Rename unit" onClick={() => { const n = ask("Rename unit", unit.name); if (n) mutate((r) => { const u = r.find((y) => y.id === rack.id)?.units.find((z) => z.id === unit.id); if (u) u.name = n.trim(); }); }}><Icon name="edit" size={16} /></button>
+                        <button className="iconbtn" title="Rename unit" aria-label={`Rename unit ${unit.name}`} onClick={() => { const n = ask("Rename unit", unit.name); if (n) mutate((r) => { const u = r.find((y) => y.id === rack.id)?.units.find((z) => z.id === unit.id); if (u) u.name = n.trim(); }); }}><Icon name="edit" size={16} /></button>
                         <button
                           className="iconbtn danger"
                           title="Delete unit"

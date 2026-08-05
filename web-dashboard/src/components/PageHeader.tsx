@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Icon from "./Icon";
+import { useNavDrawer } from "./Layout";
 
 function NotificationBell() {
   // `null` means "we don't know yet / the last fetch failed" — deliberately NOT
@@ -59,12 +60,19 @@ export default function PageHeader({
   children?: ReactNode;
 }) {
   const { profile } = useAuth();
+  const { open: openNav } = useNavDrawer();
   const initial = (profile?.name || profile?.email || "?").trim().charAt(0).toUpperCase();
   return (
     <div className="topbar">
       <div className="topbar-title">
-        <div className="crumb">HVAC Monitor</div>
-        <h1>{title}</h1>
+        {/* Hidden above the mobile breakpoint by CSS. */}
+        <button className="navtoggle" aria-label="Open the navigation menu" onClick={openNav}>
+          <Icon name="menu" size={22} />
+        </button>
+        <div>
+          <div className="crumb">HVAC Monitor</div>
+          <h1>{title}</h1>
+        </div>
       </div>
       <div className="topbar-actions">
         {children}
