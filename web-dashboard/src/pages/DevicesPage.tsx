@@ -119,7 +119,7 @@ export default function DevicesPage() {
       <PageHeader title="Devices">
         <button className="secondary" onClick={refresh}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
-      <div className="page">
+      <div className="page cols">
         {err && <div className="error">{err}</div>}
         <GatewayStatus />
 

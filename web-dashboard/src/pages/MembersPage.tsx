@@ -77,7 +77,7 @@ export default function MembersPage() {
           <Icon name="refresh" size={17} /> {loading ? "Refreshing…" : "Refresh"}
         </button>
       </PageHeader>
-      <div className="page">
+      <div className="page cols">
         {err && <div className="error" role="alert">{err}</div>}
         {msg && (
           <div className={msg.ok ? "success" : "error"} role={msg.ok ? "status" : "alert"}>
@@ -139,7 +139,10 @@ export default function MembersPage() {
               </div>
             )}
 
-            <div className="card">
+            {/* Full width: each row carries two toggles plus promote and remove.
+                Squeezed into a column those wrap under the name and the list
+                stops scanning as a list. */}
+            <div className="card wide">
               <div className="hd hd-ico"><Icon name="group" size={18} /> Members ({active.length})</div>
               {active.length === 0 && <div className="bd muted">No active members yet.</div>}
               {active.map((m) => (

@@ -160,7 +160,50 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 @media (prefers-reduced-motion: reduce) { .bell.has-alerts { animation: none; } }
 .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 15px; }
 
-.page { padding: 4px 32px 36px; max-width: 1100px; animation: fadeIn .25s ease; }
+/* 1100px inside an unconstrained .content left a ~324px dead gutter (23% of the
+   viewport at 1680px, 34% at 1920px) on every page. 1200-1440px is the usual
+   container range for a dashboard; 1400 keeps wide data rows comfortable
+   without letting prose run past a readable measure. */
+.page { padding: 4px 32px 36px; max-width: 1400px; animation: fadeIn .25s ease; }
+
+/* Multi-column card flow.
+   Widening the container alone would have made things WORSE: it stretches a
+   single stack of cards, so a two-digit interval field became a 994px input and
+   a three-row list became a 1360px band of whitespace. Cards need to flow into
+   columns instead.
+   auto-fit (not auto-fill) is deliberate: empty tracks collapse, so a page with
+   only two cards gets two half-width cards rather than two narrow ones and a
+   dead third column. */
+.page.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.page.cols > * { min-width: 0; }
+.page.cols > .card { margin-bottom: 0; }
+/* Banners, empty states and anything that isn't a card belong across the row —
+   an error message in a 420px column beside an unrelated card reads as if it
+   applies only to that card. */
+.page.cols > .error,
+.page.cols > .success,
+.page.cols > .center-msg,
+.page.cols > .bd,
+.page.cols > .card.wide { grid-column: 1 / -1; }
+
+/* A long list inside a full-width card just moves the problem: .row is
+   space-between, so at 1400px each row's two ends sit ~900px apart and the eye
+   has to travel dead space on every line. Flow the ROWS into columns too — the
+   card still fills the width, but each row keeps a readable measure. */
+/* column-gap so the columns read as separate lists rather than one wide row. */
+.card.listcard { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); column-gap: 22px; }
+.card.listcard > .hd, .card.listcard > .bd { grid-column: 1 / -1; }
+/* Every row needs its own rule: :first-child only un-borders the first column. */
+.card.listcard > .row,
+.card.listcard > div:not(.hd):not(.bd) > .row:first-child { border-top: 1px solid var(--border); }
+/* A raw backtrace is unbroken hex with no spaces, so it has nothing to wrap on
+   in a narrow column and would punch out of the card. */
+.card.listcard .mono { overflow-wrap: anywhere; }
 
 /* ---------- cards ---------- */
 .card {
@@ -243,7 +286,13 @@ input, select, textarea {
   border-radius: var(--radius-sm); padding: 12px 14px; width: 100%; font-size: 14px;
   box-shadow: var(--shadow-inset);
   transition: border-color .15s, box-shadow .15s; outline: none;
+  /* width:100% alone made a field as wide as whatever card held it — a two-digit
+     seconds value got a 994px box. Cap it near the readable measure; a field
+     wider than its longest plausible value just looks broken. */
+  max-width: 440px;
 }
+/* Short numeric values (seconds, °C) — a 440px box for "60" is still absurd. */
+.input-sm { max-width: 150px; }
 input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #c4c7d0; }
 /* The focus ring must stay clearly distinct from the resting recess, so it
    replaces the inset rather than stacking with it. */
@@ -494,6 +543,9 @@ html, body { overflow-x: hidden; }
   .page   { padding: 4px 18px 32px; }
   .topbar { padding: 18px 18px 14px; }
   .topbar-title h1 { font-size: 22px; }
+  /* Below this a 420px minimum can't be honoured once padding is taken out, and
+     auto-fit would otherwise overflow rather than drop to one column. */
+  .page.cols { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
