@@ -138,6 +138,10 @@ export const api = {
   rejectMember: (id: string) => req(`/v1/members/${id}/reject`, { method: "POST" }),
   setMemberNotify: (id: string, b: Record<string, unknown>) =>
     req(`/v1/members/${id}/notifications`, { method: "PUT", body: b }),
+  /** Remove someone from the org (admin). Deletes the account, so the address can
+   *  be invited back later; the server blocks removing yourself or the last admin. */
+  removeMember: (id: string) =>
+    req(`/v1/members/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Remove yourself from the org. Refused for the last remaining admin. */
   leaveOrg: () => req("/v1/members/me/leave", { method: "POST", body: {} }),
 

@@ -185,6 +185,25 @@ export default function MembersPage() {
                         <Icon name={m.role === "admin" ? "person_remove" : "shield_person"} size={16} />
                         {m.role === "admin" ? "Make member" : "Make admin"}
                       </button>
+                      {/* Removing an approved member wasn't possible at all —
+                          someone who left the company kept their login and kept
+                          receiving alerts. */}
+                      <button
+                        className="ghost"
+                        disabled={busy}
+                        title="Remove this member from the organization"
+                        onClick={() => {
+                          const who = m.name || m.email;
+                          if (!confirm(
+                            `Remove ${who} from the organization?\n\n` +
+                            `They will no longer be able to sign in and will stop receiving alerts. ` +
+                            `They can request to join again later.`
+                          )) return;
+                          guard(() => api.removeMember(m.id), `Removed ${who}.`);
+                        }}
+                      >
+                        <Icon name="delete" size={16} /> Remove
+                      </button>
                     </div>
                   ) : (
                     <div className="btnrow">
