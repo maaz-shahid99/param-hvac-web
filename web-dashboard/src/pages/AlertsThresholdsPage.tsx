@@ -37,6 +37,8 @@ export default function AlertsThresholdsPage() {
 
   // Delivery channel, so the page can say when alerts are only being logged.
   const [delivery, setDelivery] = useState<any>(null);
+  // How many people are actually opted in (null = not checked / failed).
+  const [recipCount, setRecipCount] = useState<number | null>(null);
 
   // Existing gateway keys. There was no way to see or revoke them, so a
   // mis-clicked "Gateway API key" left an extra key on the tenant forever.
@@ -88,6 +90,12 @@ export default function AlertsThresholdsPage() {
   useEffect(() => {
     if (!isAdmin) return;
     api.notificationsStatus().then(setDelivery).catch(() => setDelivery(null));
+    // Who is actually opted in. An org can end up with nobody — the one admin
+    // receiving alerts leaves or is removed, and everyone left has notifications
+    // switched off. Alerts then fire into the void.
+    api.recipients()
+      .then((r) => setRecipCount((r.effective_emails || []).length))
+      .catch(() => setRecipCount(null));
   }, [isAdmin]);
 
   const ack = async (id: string) => {
@@ -201,6 +209,16 @@ export default function AlertsThresholdsPage() {
         {saved && (
           <div className={saved.ok ? "success" : "error"} role={saved.ok ? "status" : "alert"}>
             {saved.text}
+          </div>
+        )}
+
+        {/* Mail can be perfectly configured and still reach nobody, if every
+            member has notifications switched off. */}
+        {isAdmin && recipCount === 0 && (
+          <div className="error" role="alert">
+            <b>No one is set to receive alerts.</b> Every alert will fire and be recorded, but
+            nobody will be emailed. Switch on Email for a member under <b>Members</b>, or add an
+            address with <b>Recipients</b> above.
           </div>
         )}
 
