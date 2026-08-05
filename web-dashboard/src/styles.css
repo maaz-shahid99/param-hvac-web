@@ -1,12 +1,16 @@
 :root {
   --bg: #f7f8fa;
   --surface: #ffffff;
-  --surface-2: #fafbfc;
-  --border: #ececf0;
-  --border-strong: #e2e3e8;
+  /* Was #fafbfc — 1% off pure white, so a recessed panel between two white
+     surfaces was invisible. Deepened enough to read as a distinct level. */
+  --surface-2: #f1f3f7;
+  --border: #e7e8ee;
+  --border-strong: #d8dae1;
   --text: #14161c;
   --muted: #6b7280;
-  --faint: #a2a8b3;
+  /* Was #a2a8b3 — 2.2:1 on white, failing AA by more than 2x, and used for the
+     "offline" indicators that most need to be noticed. */
+  --faint: #7b818d;
 
   --accent: #f23b53;            /* coral red */
   --accent-hover: #e02b44;
@@ -19,9 +23,16 @@
 
   --radius: 18px;
   --radius-sm: 12px;
-  --shadow: 0 1px 2px rgba(20, 24, 40, 0.05);
-  --shadow-md: 0 4px 16px rgba(20, 24, 40, 0.06);
-  --shadow-lg: 0 14px 40px rgba(20, 24, 40, 0.10);
+  /* Layered shadows: a tight contact shadow to separate an edge from the surface
+     beneath it, plus a softer ambient one for lift. The previous single 5%-opacity
+     2px shadow was invisible on white, so nested white cards (rack > unit > tile)
+     read as one flat mass. */
+  --shadow: 0 1px 1px rgba(20, 24, 40, .05), 0 2px 6px rgba(20, 24, 40, .07);
+  --shadow-md: 0 2px 4px rgba(20, 24, 40, .06), 0 8px 20px rgba(20, 24, 40, .10);
+  --shadow-lg: 0 4px 10px rgba(20, 24, 40, .08), 0 18px 46px rgba(20, 24, 40, .16);
+  /* Recessed inner shadow for form fields, so an input reads as a well rather
+     than a white rectangle on a white card. */
+  --shadow-inset: inset 0 1px 2px rgba(20, 24, 40, .06);
 }
 
 * { box-sizing: border-box; }
@@ -185,21 +196,30 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 .chip.blue { background: var(--blue-soft); } .chip.amber { background: var(--amber-soft); }
 
 /* ---------- hero alert (Butlr emergency card) ---------- */
+/* Darkened both gradients: white on the old #f23b53 was 3.80:1 and on #17a45a
+   3.24:1 — both fail AA, on the single most important element on the dashboard.
+   The supporting text was worse still because of the opacity below. */
 .hero {
   border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px; color: #fff;
-  background: linear-gradient(135deg, var(--accent), #ff6275);
-  box-shadow: 0 12px 30px rgba(242,59,83,.30); animation: popIn .3s ease both;
+  background: linear-gradient(135deg, #c8102e, #e03a51);
+  box-shadow: 0 12px 30px rgba(200,16,46,.30); animation: popIn .3s ease both;
 }
-.hero.calm { background: linear-gradient(135deg, #17a45a, #36c876); box-shadow: 0 12px 30px rgba(24,165,90,.25); }
+.hero.calm { background: linear-gradient(135deg, #0f6b3a, #17a45a); box-shadow: 0 12px 30px rgba(15,107,58,.25); }
 .hero h3 { margin: 0 0 4px; font-size: 18px; font-weight: 750; }
-.hero .sub { opacity: .92; font-size: 13px; }
+/* Opacity on small text over a saturated fill is what pushed the location and
+   readings below 3.5:1 — keep them at full strength. */
+.hero .sub { opacity: 1; font-size: 13px; }
 .hero .pills { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; }
-.hero .pill .k { font-size: 11px; opacity: .8; text-transform: uppercase; letter-spacing: .4px; }
+.hero .pill .k { font-size: 11px; opacity: .92; text-transform: uppercase; letter-spacing: .4px; }
 .hero .pill .v2 { font-size: 15px; font-weight: 650; }
 
 /* ---------- badges / dots ---------- */
 .dot-s { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-.on { background: var(--green); box-shadow: 0 0 0 4px var(--green-soft); animation: pulse 2s ease-in-out infinite; }
+/* Scoped to the status dot. As a bare `.on` this also matched `.switchbtn.on`
+   (the Members email/SMS toggles) and `.seg.on` (the Settings segmented control),
+   leaking a green halo and an infinite pulse onto both — they blinked forever and
+   read as "loading". */
+.dot-s.on { background: var(--green); box-shadow: 0 0 0 4px var(--green-soft); animation: pulse 2s ease-in-out infinite; }
 .off { background: var(--faint); }
 .badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: .3px; }
 .badge.green { color: var(--green); background: var(--green-soft); }
@@ -207,13 +227,25 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 .badge.grey { color: var(--muted); background: var(--surface-2); }
 
 /* ---------- forms / buttons ---------- */
-input, select {
+input, select, textarea {
+  /* A faint recess + a stronger border so the field boundary is obvious at rest.
+     Previously a white input on a white card with a near-white border had no
+     presence at all until it was focused. */
   background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
   border-radius: var(--radius-sm); padding: 12px 14px; width: 100%; font-size: 14px;
+  box-shadow: var(--shadow-inset);
   transition: border-color .15s, box-shadow .15s; outline: none;
 }
-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-input:disabled { background: var(--surface-2); color: var(--muted); }
+input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #c4c7d0; }
+/* The focus ring must stay clearly distinct from the resting recess, so it
+   replaces the inset rather than stacking with it. */
+input:focus, select:focus, textarea:focus,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input:disabled, select:disabled, textarea:disabled {
+  background: var(--surface-2); color: var(--muted); box-shadow: none;
+}
 label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 500; }
 button {
   background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm);
@@ -237,6 +269,24 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .auth-card .sub { color: var(--muted); margin-bottom: 18px; }
 .auth-card .switch { text-align: center; margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
 .error { background: var(--red-soft); border: 1px solid rgba(239,62,84,.25); color: #c2304a; padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 13px; }
+/* The design system had no success style at all, so confirmations were either an
+   inline-overridden .error (a dark-theme green at ~1.25:1 — invisible) or a grey
+   .small span indistinguishable from a failure message. */
+.success { background: var(--green-soft); border: 1px solid rgba(24,165,90,.30); color: #0f7a41; padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 13px; }
+
+/* Password field + reveal toggle. The affix sits inside the input's padding box,
+   and the input reserves room on the right so text never slides under it. */
+.input-wrap { position: relative; display: block; }
+.input-wrap input { padding-right: 44px; }
+.input-affix {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  width: 32px; height: 32px; padding: 0; display: inline-flex;
+  align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 8px;
+  color: var(--muted); cursor: pointer;
+}
+.input-affix:hover:not(:disabled) { background: var(--surface-2); color: var(--text); filter: none; }
+.input-affix:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Optional-firmware-update banner (components/OtaBanner.tsx). Informational, so
    it uses the blue accent rather than the red reserved for alerts. */
@@ -263,7 +313,18 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .rack { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); width: 348px; overflow: hidden; animation: fadeInUp .4s ease both; }
 .rack-hd { padding: 15px 18px; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .rack-body { padding: 13px; display: flex; flex-direction: column; gap: 11px; background: var(--surface-2); }
-.unit { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 13px; box-shadow: var(--shadow); }
+/* The rack is a white card; its body is a recessed well; each unit is a raised
+   card sitting IN that well. Three distinct levels instead of three whites. */
+.unit {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 11px 13px; box-shadow: var(--shadow-md);
+}
+/* Give each fan tile its own surface so intake/exhaust read as separate objects
+   rather than floating in shared whitespace. */
+.fan-tile {
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.fan-tile:hover { background: #e9ecf2; border-color: var(--border-strong); }
 .unit-name { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 9px; display: flex; justify-content: space-between; }
 .fan-rail { display: flex; gap: 10px; flex-wrap: wrap; }
 .fan-tile { flex: 1; min-width: 86px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; transition: background .15s; }

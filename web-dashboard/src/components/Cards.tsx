@@ -18,6 +18,36 @@ export function isOnline(ts: number) {
   return nowSec() - ts < STALE_SECONDS;
 }
 
+/**
+ * Format a number that came from unvalidated JSON. Returns an em dash rather
+ * than "NaN" or throwing, so a null reading degrades to "—" instead of taking
+ * the page down (a bare `.toFixed()` on a null threw a TypeError, and with no
+ * error boundary that blanked the whole app).
+ */
+export function num(v: unknown, digits = 1, unit = ""): string {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(digits)}${unit}`;
+}
+
+/**
+ * The high-temperature limit that alerts ACTUALLY fire on, from a /v1/thresholds
+ * response: the tenant override if one exists, else the server default.
+ *
+ * Both temperature cards used to colour against `defaults.high_c` while the
+ * threshold engine evaluated against the tenant override. With a default of 40
+ * and an override of 70 that painted probes at 41–53 °C bright red with no alert
+ * firing; flip the values and it silently paints them green WHILE alerting.
+ * Either way the dashboard contradicted the alarm.
+ */
+export function tenantHighLimit(thresholds: any): number {
+  const def = Number(thresholds?.defaults?.high_c);
+  const tenant = (thresholds?.thresholds || []).find((x: any) => x?.scope === "tenant");
+  const v = Number(tenant?.high_c);
+  if (Number.isFinite(v)) return v;
+  return Number.isFinite(def) ? def : 40;
+}
+
 // --- ordering helpers -------------------------------------------------------
 // Layout data is authored in creation order, which reads as random once a rack
 // has a few units. These give every list the same physical ordering: racks
@@ -122,10 +152,13 @@ export function AlertsCard({
         alerts.map((a) => {
           const acked = a.state === "acked";
           const meta = KIND_META[a.kind] || { icon: "warning", label: a.kind };
+          // Only "stale" was special-cased, so any other alert with a missing
+          // value rendered "NaN°C (limit NaN°C)" in the most prominent element
+          // on the page. num() degrades to an em dash instead.
           const sub =
             a.kind === "stale"
               ? "Sensor stopped reporting"
-              : `${(+a.value).toFixed(1)}°C (limit ${(+a.threshold).toFixed(1)}°C)`;
+              : `${num(a.value, 1, "°C")} (limit ${num(a.threshold, 1, "°C")})`;
           return (
             <div className="row" key={a.id}>
               <div className="btnrow">
@@ -182,7 +215,10 @@ export function LiveTempsCard({
                 </div>
               </div>
               <span className="small muted">
-                {ago(t)}{s.slot ? ` · slot ${s.slot}` : ""}
+                {/* A missing ts made t NaN, and ago(NaN) falls through every
+                    comparison to render the literal "NaNd ago". */}
+                {Number.isFinite(t) ? ago(t) : "no timestamp"}
+                {s.slot ? ` · slot ${s.slot}` : ""}
               </span>
             </div>
           );

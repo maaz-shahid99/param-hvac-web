@@ -1,7 +1,8 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
 import Icon from "./Icon";
 import OtaBanner from "./OtaBanner";
+import ErrorBoundary from "./ErrorBoundary";
 
 const items = [
   { to: "/", label: "Dashboard", icon: "dashboard", end: true },
@@ -17,6 +18,7 @@ const items = [
 
 export default function Layout() {
   const { profile, signOut } = useAuth();
+  const { pathname } = useLocation();
   const isAdmin = profile?.role === "admin";
   const navItems = items.filter((it) => !it.adminOnly || isAdmin);
   return (
@@ -53,7 +55,11 @@ export default function Layout() {
         {/* Mounted at the shell level so a pending optional update is visible on
             every page, not just the dashboard. Self-hides when there's none. */}
         <OtaBanner />
-        <Outlet />
+        {/* Keyed on the route so navigating away clears a crashed page instead
+            of trapping the user on it. */}
+        <ErrorBoundary resetKey={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

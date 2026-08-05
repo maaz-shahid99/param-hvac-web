@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { AlertsCard, LiveTempsCard } from "../components/Cards";
+import { AlertsCard, LiveTempsCard, tenantHighLimit } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -12,6 +12,9 @@ export default function AlertsThresholdsPage() {
   const [high, setHigh] = useState("40");
   const [delta, setDelta] = useState("20");
   const [defs, setDefs] = useState({ high_c: 40, delta_c: 20 });
+  // The SAVED limit alerts fire on. Kept separate from the `high` input so the
+  // card below reflects what the server is actually using, not an unsaved edit.
+  const [effHigh, setEffHigh] = useState(40);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -23,6 +26,7 @@ export default function AlertsThresholdsPage() {
       setSensors(c.sensors || []);
       const d = t.defaults || { high_c: 40, delta_c: 20 };
       setDefs(d);
+      setEffHigh(tenantHighLimit(t));
       if (initial) {
         const tenant = (t.thresholds || []).find((x: any) => x.scope === "tenant");
         setHigh(String(tenant ? tenant.high_c : d.high_c));
@@ -116,7 +120,7 @@ export default function AlertsThresholdsPage() {
           </div>
         </div>
 
-        <LiveTempsCard sensors={sensors} highLimit={defs.high_c} />
+        <LiveTempsCard sensors={sensors} highLimit={effHigh} />
       </div>
     </>
   );

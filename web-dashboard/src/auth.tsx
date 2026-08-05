@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, ApiError, setToken } from "./api";
+import { api, ApiError, setToken, setUnauthorizedHandler } from "./api";
 
 export type Profile = {
   role: string; // admin | member
@@ -22,6 +22,10 @@ type AuthCtx = {
   status: Status;
   profile: Profile | null;
   error: string | null;
+  /** True when /v1/me last failed for a NON-auth reason, so `profile` is a
+   *  cached copy that may no longer match the server (a cached role:"admin"
+   *  would otherwise keep rendering admin controls that all 403). */
+  stale: boolean;
   isAdmin: boolean;
   isPending: boolean;
   login: (email: string, password: string) => Promise<boolean>;
@@ -64,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("unknown");
   const [profile, setProfile] = useState<Profile | null>(loadProfile());
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
 
   // Restore a persisted session on load, then refresh from /v1/me.
   useEffect(() => {
@@ -77,6 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // End the session centrally whenever ANY request 401s, not just the one /v1/me
+  // call on mount. Every page polls forever, so a token expiring mid-session was
+  // the normal case — and it used to surface as components quietly reporting
+  // false hardware state instead of "you are signed out".
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setToken(null);
+      saveProfile(null);
+      setProfile(null);
+      setStatus("signedOut");
+      setError("Your session expired. Please sign in again.");
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   async function refreshMe() {
     try {
       const me = await api.me();
@@ -85,9 +105,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!p.org_code && profile?.org_code) p.org_code = profile.org_code;
       setProfile(p);
       saveProfile(p);
+      setStale(false);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         doSignOut();
+      } else {
+        // Not an auth problem — server down, network drop, bad gateway. Don't
+        // sign the user out, but stop pretending the cached profile is current.
+        setStale(true);
       }
     }
   }
@@ -101,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(p);
       saveProfile(p);
       setStatus("signedIn");
+      setStale(false);
       return true;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Something went wrong.");
@@ -117,12 +143,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveProfile(null);
     setProfile(null);
     setStatus("signedOut");
+    // A deliberate sign-out starts clean; without this a leftover error from the
+    // previous session renders on the login screen the user lands on.
+    setError(null);
+    setStale(false);
   }
 
   const value: AuthCtx = {
     status,
     profile,
     error,
+    stale,
     isAdmin: profile?.role === "admin",
     isPending: profile?.status === "pending",
     login,

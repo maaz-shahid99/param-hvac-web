@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { AlertsCard, LiveTempsCard, isOnline } from "../components/Cards";
+import { AlertsCard, LiveTempsCard, isOnline, tenantHighLimit, num } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
@@ -17,7 +17,9 @@ export default function DashboardPage() {
       const [a, c, t] = await Promise.all([api.alerts("open"), api.current(), api.thresholds()]);
       setAlerts(a.alerts || []);
       setSensors(c.sensors || []);
-      setHigh(Number(t.defaults?.high_c ?? 40));
+      // Must match what the alert engine evaluates against — the tenant
+      // override, not the server default. See tenantHighLimit().
+      setHigh(tenantHighLimit(t));
       setErr(null);
     } catch (e: any) {
       setErr(e.message || "Could not reach the cloud server.");
@@ -38,7 +40,11 @@ export default function DashboardPage() {
 
   const online = sensors.filter((s) => isOnline(+s.ts)).length;
   const offline = sensors.length - online;
-  const hottest = sensors.reduce((m, s) => Math.max(m, +s.max_c || 0), 0);
+  // "Hottest NOW" must ignore sensors that stopped reporting — otherwise a probe
+  // that died an hour ago at 51 °C keeps headlining the tile indefinitely.
+  const hottest = sensors
+    .filter((s) => isOnline(+s.ts))
+    .reduce((m, s) => Math.max(m, +s.max_c || 0), 0);
   const top = alerts[0];
 
   if (loading) return <div className="center-msg">Loading…</div>;
@@ -57,8 +63,8 @@ export default function DashboardPage() {
             <h3 className="hd-ico"><Icon name="warning" size={24} fill /> {top.kind === "stale" ? "Sensor offline" : top.kind === "delta" ? "High ΔT" : "High temperature"}</h3>
             <div className="sub">{top.location || "Unmapped"}{alerts.length > 1 ? ` · +${alerts.length - 1} more open` : ""}</div>
             <div className="pills">
-              <div className="pill"><div className="k">Reading</div><div className="v2">{top.kind === "stale" ? "—" : `${(+top.value).toFixed(1)}°C`}</div></div>
-              <div className="pill"><div className="k">Limit</div><div className="v2">{top.kind === "stale" ? "—" : `${(+top.threshold).toFixed(1)}°C`}</div></div>
+              <div className="pill"><div className="k">Reading</div><div className="v2">{top.kind === "stale" ? "—" : num(top.value, 1, "°C")}</div></div>
+              <div className="pill"><div className="k">Limit</div><div className="v2">{top.kind === "stale" ? "—" : num(top.threshold, 1, "°C")}</div></div>
               <div className="pill"><div className="k">Open alerts</div><div className="v2">{alerts.length}</div></div>
             </div>
           </div>

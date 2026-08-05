@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, autoName, downloadCsv } from "../api";
-import { ago, nowSec, compareLocation, naturalCompare } from "../components/Cards";
+import { ago, nowSec, compareLocation, naturalCompare, num } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -88,8 +88,11 @@ export default function EnvDataPage() {
                   <div className="small muted mono">{d.eui}{d.ts ? ` · ${ago(nowSec() - d.ts)}` : ""}</div>
                 </div>
               </div>
+              {/* These come from unvalidated JSON. A router with a dead BME
+                  sensor sends nulls, and a bare .toFixed() there threw a
+                  TypeError that took the whole app down with it. */}
               <span className="small">
-                {d.temp.toFixed(1)}°C · {d.hum.toFixed(0)}%RH · {d.pres.toFixed(0)}hPa · VOC {Math.round(d.voc)}
+                {num(d.temp, 1, "°C")} · {num(d.hum, 0, "%RH")} · {num(d.pres, 0, "hPa")} · VOC {num(d.voc, 0)}
               </span>
             </div>
           ))}

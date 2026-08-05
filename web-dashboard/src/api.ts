@@ -9,6 +9,46 @@ export class ApiError extends Error {
   }
 }
 
+/** Turn a FastAPI error body into something a human can read.
+ *
+ *  FastAPI returns `detail` as a STRING for HTTPException but as an ARRAY OF
+ *  OBJECTS for request-validation (422) errors:
+ *    {"detail":[{"type":"missing","loc":["body","password"],"msg":"Field required"}]}
+ *  Passing that array straight to `new Error()` stringifies it to the literal
+ *  "[object Object]", which is what every error banner in the app used to show
+ *  for any 422 — and with no client-side validation, an empty form submit was
+ *  the normal way to get there. */
+function readableDetail(data: any, status: number): string {
+  const d = data?.detail;
+  if (typeof d === "string" && d.trim()) return d;
+  if (Array.isArray(d)) {
+    const parts = d
+      .map((e: any) => {
+        if (typeof e === "string") return e;
+        // Drop the leading "body"/"query" segment — it means nothing to a user.
+        const field = Array.isArray(e?.loc) ? e.loc.filter((s: any) => s !== "body" && s !== "query").join(".") : "";
+        const msg = e?.msg || e?.type || "invalid value";
+        return field ? `${field}: ${msg}` : msg;
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  if (d && typeof d === "object") {
+    const m = (d as any).msg || (d as any).message;
+    if (typeof m === "string" && m) return m;
+  }
+  return `HTTP ${status}`;
+}
+
+/** Called when any request comes back 401 so the app can end the session once,
+ *  centrally. Without this an expired token surfaced as component-level noise:
+ *  the alert bell silently showed zero and the gateway card claimed the hardware
+ *  was OFFLINE — i.e. the UI blamed the equipment for an auth failure. */
+let _onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  _onUnauthorized = fn;
+}
+
 let _token: string | null = localStorage.getItem("cloud_jwt");
 
 export function setToken(t: string | null) {
@@ -51,9 +91,26 @@ async function req(
     throw new ApiError(0, "Could not reach the server. Check the URL and your connection.");
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  // Guard the parse: a reverse proxy 502, a captive portal, or a misrouted SPA
+  // index.html all return HTML. JSON.parse would throw a raw SyntaxError that
+  // isn't an ApiError, escaping every `instanceof ApiError` check and surfacing
+  // to the user as `Unexpected token '<', "<!doctype "... is not valid JSON`.
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (!res.ok) {
+        throw new ApiError(res.status, `Server error (HTTP ${res.status}). The response was not valid JSON.`);
+      }
+      throw new ApiError(0, "The server returned an unreadable response.");
+    }
+  }
   if (!res.ok) {
-    throw new ApiError(res.status, (data && data.detail) || `HTTP ${res.status}`);
+    // Sign out once, centrally, rather than letting each caller invent its own
+    // (usually silent) handling of an expired session.
+    if (res.status === 401 && auth) _onUnauthorized?.();
+    throw new ApiError(res.status, readableDetail(data, res.status));
   }
   return data;
 }

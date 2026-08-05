@@ -5,29 +5,46 @@ import { useAuth } from "../auth";
 import Icon from "./Icon";
 
 function NotificationBell() {
-  const [count, setCount] = useState(0);
+  // `null` means "we don't know yet / the last fetch failed" — deliberately NOT
+  // 0. Swallowing the error and leaving the count at 0 rendered a calm grey bell
+  // labelled "No open alerts", so a broken API was indistinguishable from a
+  // healthy site. On an alarm product that is the worst possible failure mode.
+  const [count, setCount] = useState<number | null>(null);
   const nav = useNavigate();
   useEffect(() => {
     const f = async () => {
       try {
         const r = await api.alerts("open");
         setCount((r.alerts || []).filter((a: any) => a.state !== "cleared").length);
-      } catch {/* */}
+      } catch {
+        setCount(null);
+      }
     };
     f();
     const id = setInterval(f, 10000);
     return () => clearInterval(id);
   }, []);
-  const label = count > 0 ? `${count} open alert${count === 1 ? "" : "s"}` : "No open alerts";
+  const unknown = count === null;
+  const active = !unknown && count > 0;
+  const label = unknown
+    ? "Alert status unavailable — could not reach the server"
+    : active
+      ? `${count} open alert${count === 1 ? "" : "s"}`
+      : "No open alerts";
   return (
     <button
-      className={`bell${count > 0 ? " has-alerts" : ""}`}
+      className={`bell${active ? " has-alerts" : ""}${unknown ? " unknown" : ""}`}
       title={label}
       aria-label={label}
       onClick={() => nav("/alerts")}
     >
-      <Icon name={count > 0 ? "notifications_active" : "notifications"} size={20} fill={count > 0} />
-      {count > 0 && <span className="bell-count">{count}</span>}
+      <Icon
+        name={unknown ? "notifications_paused" : active ? "notifications_active" : "notifications"}
+        size={20}
+        fill={active}
+      />
+      {active && <span className="bell-count">{count}</span>}
+      {unknown && <span className="bell-count">?</span>}
     </button>
   );
 }
