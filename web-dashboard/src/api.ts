@@ -71,6 +71,9 @@ export const api = {
   reset: (b: Record<string, unknown>) =>
     req("/v1/auth/reset", { method: "POST", auth: false, body: b }),
   me: () => req("/v1/me"),
+  /** Change your own password while signed in (requires the current one). */
+  changePassword: (current_password: string, new_password: string) =>
+    req("/v1/auth/change-password", { method: "POST", body: { current_password, new_password } }),
 
   // members (admin manage; read allowed for any member)
   members: (state = "all") => req(`/v1/members?state=${state}`),

@@ -41,6 +41,31 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 1500);
   };
 
+  // Change password. Previously the only way to rotate one was the emailed OTP
+  // reset on the login screen, which needs working SMTP — so on an appliance
+  // without mail configured there was no route at all.
+  const [curPw, setCurPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const changePassword = async () => {
+    setPwMsg(null);
+    if (newPw !== confirmPw) { setPwMsg({ ok: false, text: "New passwords don't match." }); return; }
+    if (newPw.length < 6) { setPwMsg({ ok: false, text: "New password must be at least 6 characters." }); return; }
+    setPwBusy(true);
+    try {
+      await api.changePassword(curPw, newPw);
+      setCurPw(""); setNewPw(""); setConfirmPw("");
+      setPwMsg({ ok: true, text: "Password changed. Existing sessions stay signed in." });
+    } catch (e: any) {
+      setPwMsg({ ok: false, text: e?.message || "Could not change the password." });
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeader title="Settings" />
@@ -104,6 +129,45 @@ export default function SettingsPage() {
               <div className="small muted">{profile?.email} · {profile?.role} · {profile?.status}</div>
             </div>
             <button className="danger" onClick={signOut}><Icon name="logout" size={17} /> Sign out</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="hd hd-ico"><Icon name="lock" size={18} /> Change password</div>
+          <div className="bd">
+            <div style={{ display: "grid", gap: 10, maxWidth: 380 }}>
+              <label className="small muted">Current password
+                <input type="password" autoComplete="current-password" value={curPw}
+                       onChange={(e) => setCurPw(e.target.value)} />
+              </label>
+              <label className="small muted">New password
+                <input type="password" autoComplete="new-password" value={newPw}
+                       onChange={(e) => setNewPw(e.target.value)} />
+              </label>
+              <label className="small muted">Confirm new password
+                <input type="password" autoComplete="new-password" value={confirmPw}
+                       onChange={(e) => setConfirmPw(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === "Enter") changePassword(); }} />
+              </label>
+              <div className="btnrow">
+                <button onClick={changePassword} disabled={pwBusy || !curPw || !newPw || !confirmPw}>
+                  {pwBusy ? "Changing…" : "Change password"}
+                </button>
+                {pwMsg && (
+                  <span className="small" style={{ color: pwMsg.ok ? "var(--green)" : "var(--red)" }}>
+                    {pwMsg.text}
+                  </span>
+                )}
+              </div>
+              {/* Tokens here are stateless with no revocation list, so a change
+                  can't boot other sessions. Be honest about that rather than
+                  implying a rotation locks everyone else out. */}
+              <div className="small muted">
+                Changing your password does <b>not</b> sign out sessions that are already
+                signed in — tokens stay valid until they expire. To force every session
+                off immediately, rotate <span className="mono">JWT_SECRET</span> on the server.
+              </div>
+            </div>
           </div>
         </div>
 
