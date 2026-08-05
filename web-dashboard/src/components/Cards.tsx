@@ -159,6 +159,70 @@ function rgb(c: [number, number, number]) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+/**
+ * ΔT -> colour, scored against the tenant's own delta limit rather than an
+ * absolute temperature. A 14 °C rise is healthy where the limit is 30 and
+ * alarming where it's 15, so the ramp has to be relative or it contradicts the
+ * alert engine — the same mistake `tenantHighLimit` exists to prevent.
+ */
+export function deltaColor(d: number, limit: number): string {
+  const lim = Number.isFinite(limit) && limit > 0 ? limit : 30;
+  const k = d / lim;
+  if (k >= 1) return "rgb(230,90,70)";      // at or over the limit: alerting
+  if (k >= 0.75) return "rgb(235,180,50)";  // closing in
+  if (k >= 0.4) return "rgb(120,175,110)";
+  return "rgb(90,140,210)";                 // barely any rise across the unit
+}
+
+/**
+ * Fleet totals for the "Sensors online" tile.
+ *
+ * The tile used to divide by the number of rows in /v1/current, which is built
+ * from `SELECT DISTINCT eui FROM readings` — so a commissioned node that has
+ * never reported (or whose data aged out) drops out of the numerator AND the
+ * denominator together, and the fraction can never expose it. That is how
+ * "16 / 16 · all reporting" was rendered while a whole node sat dark.
+ *
+ * Probes and nodes are counted separately on purpose: probe ROMs are discovered
+ * from readings, so the server genuinely does not know how many probes a node
+ * that has never reported has. Only the node itself can be counted.
+ */
+export function fleetRollup(currentRows: any[], roster: any[]) {
+  const probesTotal = currentRows.length;
+  const probesOnline = currentRows.filter((s) => isOnline(+s.ts)).length;
+
+  // newest ts per EUI seen in /v1/current
+  const seen = new Map<string, number>();
+  for (const s of currentRows) {
+    const eui = String(s.eui || "").toLowerCase();
+    if (!eui) continue;
+    const ts = Number(s.ts) || 0;
+    if (ts >= (seen.get(eui) ?? -Infinity)) seen.set(eui, ts);
+  }
+  // Nodes = commissioned sensors UNION whatever is actually reporting, so this
+  // stays right whether the roster is stale or the device predates it.
+  const nodes = new Set<string>(seen.keys());
+  for (const d of roster || []) {
+    if (String(d?.kind ?? "sensor") !== "sensor") continue;
+    const eui = String(d?.eui || "").toLowerCase();
+    if (eui) nodes.add(eui);
+  }
+  const darkEuis = [...nodes].filter((e) => {
+    const ts = seen.get(e);
+    return ts === undefined || !isOnline(ts);
+  }).sort();
+
+  return {
+    probesOnline,
+    probesTotal,
+    nodesTotal: nodes.size,
+    nodesReporting: nodes.size - darkEuis.length,
+    darkEuis,
+    /** true when a dark node has never sent anything at all, vs went quiet. */
+    neverReported: (eui: string) => !seen.has(eui),
+  };
+}
+
 // Hotter sensor -> faster fan. Returns seconds per revolution.
 export function tempSpinSeconds(t: number): number {
   const lo = 18, hi = 55, slow = 2.6, fast = 0.5;

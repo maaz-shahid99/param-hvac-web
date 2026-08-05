@@ -379,6 +379,81 @@ button:not(.secondary):not(.ghost):not(.iconbtn):not(.input-affix):focus-visible
 .legend .grad { width: 130px; height: 8px; border-radius: 999px; background: linear-gradient(90deg, #5a8cd2, #50b478, #ebb432, var(--accent)); }
 
 /* ===================================================================
+   Dashboard two-column layout
+   .page caps at 1100px inside an unconstrained .content, so on any
+   desktop there was a wide empty gutter to the right of every card.
+   The dashboard opts into a wider cap and puts a rail in that space.
+   =================================================================== */
+.page.dash { max-width: 1560px; }
+.dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 18px; align-items: start; }
+.dash-main, .dash-rail { min-width: 0; }   /* let grid children actually shrink */
+
+/* A stat that navigates somewhere needs to look and behave like a control. */
+.stat { display: block; color: inherit; }
+.statlink { cursor: pointer; }
+.statlink:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.statlink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- thermal map ---------- */
+.hm-sum { padding: 10px 16px 0; }
+.heatmap { padding: 8px 12px 4px; }
+.hm-rack { font-weight: 650; font-size: 12px; padding: 10px 4px 4px; letter-spacing: .2px; }
+.hm-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 54px 54px 58px;
+  gap: 5px; align-items: center; margin-bottom: 4px;
+}
+.hm-head { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--faint); font-weight: 600; }
+.hm-head span { text-align: center; }
+.hm-unit {
+  display: flex; align-items: center; gap: 5px; font-size: 12.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hm-node { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hm-cell {
+  display: flex; align-items: center; justify-content: center;
+  height: 27px; border-radius: 7px; font-size: 12px; font-weight: 650;
+  font-variant-numeric: tabular-nums; box-shadow: var(--shadow);
+}
+/* Unassigned is a HOLE in the layout, not a zero — it has to read as absent. */
+.hm-cell.unassigned { background: transparent; border: 1px dashed var(--border-strong); color: var(--faint); box-shadow: none; }
+.hm-cell.offline { background: var(--surface-2); color: var(--faint); box-shadow: none; }
+.hm-cell.none { background: transparent; color: var(--faint); box-shadow: none; }
+/* At or over the limit the alert engine fires on — ring it so the map and the
+   alarm never disagree about what counts as bad. */
+.hm-cell.hot { box-shadow: 0 0 0 2px var(--red), var(--shadow); }
+.hm-legend { display: flex; align-items: center; gap: 12px; padding: 10px 16px 14px; flex-wrap: wrap; }
+.hm-legend .grad { width: 56px; height: 7px; border-radius: 999px; background: linear-gradient(90deg, #5a8cd2, #50b478, #ebb432, var(--accent)); }
+.hm-key { display: inline-flex; align-items: center; gap: 5px; }
+.hm-key .hm-cell { height: 17px; width: 22px; font-size: 10px; font-style: normal; }
+
+/* ---------- trend chart ---------- */
+.segmented.tiny { padding: 3px; border-radius: 10px; }
+.segmented.tiny .seg { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
+.chart-bd { padding: 14px 16px 16px; }
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.ch-grid { stroke: var(--border); stroke-width: 1; }
+.ch-axis { stroke: var(--border-strong); stroke-width: 1; }
+.ch-tick { font-size: 8.5px; fill: var(--faint); text-anchor: end; }
+.ch-limit { stroke: var(--red); stroke-width: 1.2; stroke-dasharray: 4 3; opacity: .8; }
+/* Halo the label: it sits on the limit line, which is exactly where a series
+   crossing into alarm also sits, so plain text became unreadable at the moment
+   it mattered most. */
+.ch-limit-l {
+  font-size: 8.5px; fill: var(--red); font-weight: 700;
+  stroke: var(--surface); stroke-width: 2.5px; paint-order: stroke fill;
+}
+.ch-legend { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.ch-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.ch-chip i { width: 8px; height: 8px; border-radius: 50%; }
+.ch-chip:hover { background: var(--surface-2); color: var(--text); }
+.ch-chip.off { opacity: .45; text-decoration: line-through; }
+.ch-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ===================================================================
    Responsive
    The stylesheet had no width media queries at all, while index.html
    declared a mobile viewport. At 390px the document rendered 618-677px
@@ -389,6 +464,13 @@ button:not(.secondary):not(.ghost):not(.iconbtn):not(.input-affix):focus-visible
 /* Never let the page scroll sideways as a whole; wide content gets its
    own scroll container instead (see .card .bd below). */
 html, body { overflow-x: hidden; }
+
+/* Below this the 400px rail would squeeze the main column, so it drops
+   underneath and the dashboard goes back to the standard single width. */
+@media (max-width: 1280px) {
+  .page.dash { max-width: 1100px; }
+  .dash-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 900px) {
   .page   { padding: 4px 18px 32px; }

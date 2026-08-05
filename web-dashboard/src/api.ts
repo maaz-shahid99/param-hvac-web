@@ -187,6 +187,12 @@ export const api = {
   putSettings: (b: Record<string, unknown>) =>
     req("/v1/settings", { method: "PUT", body: b }),
 
+  /** Bucketed intake/exhaust/ΔT history per rack unit, for the trend chart.
+   *  Aggregated server-side the same way the alert engine computes ΔT, so the
+   *  graph and the alert history can't tell different stories. */
+  readingsSeries: (hours: number, points = 120) =>
+    req(`/v1/readings/series?hours=${hours}&points=${points}`),
+
   // environmental data (router/gateway BME) + firmware crash reports
   envCurrent: () => req("/v1/env/current"),
   envProbes: () => req("/v1/env/probes"),
