@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
+import { api } from "../api";
+import { usePoll } from "../usePoll";
 import Icon from "./Icon";
 import OtaBanner from "./OtaBanner";
 import ErrorBoundary from "./ErrorBoundary";
@@ -32,6 +34,18 @@ export default function Layout() {
   // column with no way to dismiss it, so on a phone it ate two thirds of the
   // screen and the content beside it was clipped.
   const [navOpen, setNavOpen] = useState(false);
+
+  // Pending join requests, badged on the Members item. Without this a request
+  // was invisible unless someone happened to open that page — the alert bell
+  // only counts temperature alerts.
+  const [pending, setPending] = useState(0);
+  usePoll(async () => {
+    if (!isAdmin) return;
+    try {
+      const r = await api.members("pending");
+      setPending((r.members || []).length);
+    } catch { setPending(0); }
+  }, 60000);
   // Close on navigation, so tapping a link doesn't leave the drawer covering the
   // page you just opened.
   useEffect(() => { setNavOpen(false); }, [pathname]);
@@ -68,6 +82,14 @@ export default function Layout() {
                 <Icon name={it.icon} size={20} />
               </span>
               {it.label}
+              {it.to === "/members" && pending > 0 && (
+                <span
+                  className="navbadge"
+                  title={`${pending} pending join request${pending === 1 ? "" : "s"}`}
+                >
+                  {pending}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

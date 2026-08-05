@@ -9,6 +9,11 @@ export function nowSec() {
   return Date.now() / 1000;
 }
 export function ago(s: number): string {
+  // Clamp: these ages come from comparing a SERVER timestamp against the
+  // BROWSER's clock, and the appliance's clock currently runs ~35s ahead — so a
+  // fresh reading rendered as "-26s ago". Never show a negative age.
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  if (s < 5) return "just now";
   if (s < 60) return `${Math.round(s)}s ago`;
   if (s < 3600) return `${Math.round(s / 60)}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;

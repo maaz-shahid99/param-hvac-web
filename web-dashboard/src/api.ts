@@ -161,6 +161,10 @@ export const api = {
   createApiKey: (label: string) =>
     req("/v1/apikeys", { method: "POST", body: { label } }),
   apiKeys: () => req("/v1/apikeys"),
+  /** Revoke a key. The server refuses if it's the last one a gateway is
+   *  actively using — that would cut the uplink irrecoverably. */
+  deleteApiKey: (id: string) =>
+    req(`/v1/apikeys/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   // topology (rack -> unit -> port)
   topology: () => req("/v1/topology"),

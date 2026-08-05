@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { usePoll } from "../usePoll";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { AlertsCard, LiveTempsCard, tenantHighLimit, copyText } from "../components/Cards";
+import { AlertsCard, LiveTempsCard, tenantHighLimit, copyText, ago, nowSec } from "../components/Cards";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -37,6 +37,28 @@ export default function AlertsThresholdsPage() {
 
   // Delivery channel, so the page can say when alerts are only being logged.
   const [delivery, setDelivery] = useState<any>(null);
+
+  // Existing gateway keys. There was no way to see or revoke them, so a
+  // mis-clicked "Gateway API key" left an extra key on the tenant forever.
+  const [keys, setKeys] = useState<any[]>([]);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const loadKeys = async () => {
+    try { setKeys((await api.apiKeys()).keys || []); }
+    catch (e: any) { setSaved({ ok: false, text: e?.message || "Could not load API keys." }); }
+  };
+  const revokeKey = async (k: any) => {
+    const used = k.last_used_at
+      ? `\n\nIt was last used ${Math.round((Date.now()/1000 - k.last_used_at)/60)} min ago — if that is your live gateway, revoking it STOPS it reporting and it cannot be re-provisioned without physical access to the device.`
+      : "\n\nThis key has never been used, so nothing is relying on it.";
+    if (!confirm(`Revoke the API key "${k.label || "(no label)"}"?${used}`)) return;
+    try {
+      await api.deleteApiKey(k.id);
+      setSaved({ ok: true, text: "API key revoked." });
+      loadKeys();
+    } catch (e: any) {
+      setSaved({ ok: false, text: e?.message || "Could not revoke that key." });
+    }
+  };
 
   async function refresh(initial = false) {
     try {
@@ -160,6 +182,14 @@ export default function AlertsThresholdsPage() {
       <PageHeader title="Alerts & Thresholds">
         {isAdmin && <button className="secondary" onClick={genKey}><Icon name="vpn_key" size={17} /> Gateway API key</button>}
         {isAdmin && <button className="secondary" onClick={openRecipients}><Icon name="group" size={17} /> Recipients</button>}
+        {isAdmin && (
+          <button
+            className="secondary"
+            onClick={() => { setKeysOpen((o) => !o); if (!keysOpen) loadKeys(); }}
+          >
+            <Icon name="key" size={17} /> Manage keys
+          </button>
+        )}
         <button className="secondary" onClick={() => refresh(false)}><Icon name="refresh" size={17} /> Refresh</button>
       </PageHeader>
       <div className="page">
@@ -217,6 +247,39 @@ export default function AlertsThresholdsPage() {
                 </button>
                 <button className="secondary" onClick={() => setNewKey(null)}>Done</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {keysOpen && (
+          <div className="card">
+            <div className="hd hd-ico"><Icon name="key" size={18} /> Gateway API keys ({keys.length})</div>
+            {keys.length === 0 ? (
+              <div className="bd muted">No keys yet. Use “Gateway API key” to mint one.</div>
+            ) : keys.map((k) => {
+              const used = Number(k.last_used_at) || 0;
+              const live = used > 0 && nowSec() - used < 900;
+              return (
+                <div className="row" key={k.id}>
+                  <div className="btnrow">
+                    <span className={`iconwrap ${live ? "green" : "grey"}`}><Icon name="key" size={20} /></span>
+                    <div>
+                      <div>{k.label || "(no label)"} {live && <span className="badge green">IN USE</span>}</div>
+                      <div className="small muted">
+                        {used ? `last used ${ago(nowSec() - used)}` : "never used — safe to revoke"}
+                      </div>
+                    </div>
+                  </div>
+                  <button className="secondary" onClick={() => revokeKey(k)}>
+                    <Icon name="delete" size={16} /> Revoke
+                  </button>
+                </div>
+              );
+            })}
+            <div className="bd small muted">
+              A gateway stores its key in NVS. Revoking the key a live gateway is using stops it
+              reporting, and it cannot be re-provisioned without physical access — so the server
+              refuses to remove the last in-use key.
             </div>
           </div>
         )}
