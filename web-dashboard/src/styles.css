@@ -176,7 +176,7 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
    dead third column. */
 .page.cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 18px;
   align-items: start;
 }
@@ -196,7 +196,7 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
    has to travel dead space on every line. Flow the ROWS into columns too — the
    card still fills the width, but each row keeps a readable measure. */
 /* column-gap so the columns read as separate lists rather than one wide row. */
-.card.listcard { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); column-gap: 22px; }
+.card.listcard { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); column-gap: 22px; }
 .card.listcard > .hd, .card.listcard > .bd { grid-column: 1 / -1; }
 /* Every row needs its own rule: :first-child only un-borders the first column. */
 .card.listcard > .row,
@@ -227,7 +227,7 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 .small { font-size: 12px; }
 
 /* ---------- stats (Butlr "daily insights" tiles) ---------- */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; margin-bottom: 18px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 18px; margin-bottom: 18px; }
 .stat {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 20px; box-shadow: var(--shadow); animation: fadeInUp .35s ease both;
@@ -256,6 +256,9 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
   box-shadow: 0 12px 30px rgba(200,16,46,.30); animation: popIn .3s ease both;
 }
 .hero.calm { background: linear-gradient(135deg, #0f6b3a, #17a45a); box-shadow: 0 12px 30px rgba(15,107,58,.25); }
+/* Between alarming and all-clear: nothing has crossed a limit, but something
+   still wants a look. Amber rather than green so it doesn't read as "fine". */
+.hero.watch { background: linear-gradient(135deg, #8a5a12, #c0871f); box-shadow: 0 12px 30px rgba(138,90,18,.25); }
 .hero h3 { margin: 0 0 4px; font-size: 18px; font-weight: 750; }
 /* Opacity on small text over a saturated fill is what pushed the location and
    readings below 3.5:1 — keep them at full strength. */
@@ -399,10 +402,17 @@ button:not(.secondary):not(.ghost):not(.iconbtn):not(.input-affix):focus-visible
 .center-msg { text-align: center; color: var(--muted); padding: 60px; animation: fadeIn .3s ease; }
 
 /* ---------- visualization ---------- */
-.viz-grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
-.rack { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); width: 348px; overflow: hidden; animation: fadeInUp .4s ease both; }
-.rack-hd { padding: 15px 18px; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-.rack-body { padding: 13px; display: flex; flex-direction: column; gap: 11px; background: var(--surface-2); }
+/* Racks used to be a hard 348px inside a flex-wrap row, so two of them filled
+   716px of 1336 and left 620px — 46% of the page — dead. Widening .page made it
+   worse, because a fixed-width rack can't grow. Same auto-fit + minmax pattern
+   as .page.cols and .card.listcard: one idea in this stylesheet, not three. */
+.viz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; align-items: start; }
+.rack { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; overflow: hidden; animation: fadeInUp .4s ease both; }
+.rack-hd { padding: 15px 18px; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.rack-hd .rack-sum { font-weight: 500; white-space: nowrap; }
+/* Units flow across the wider rack instead of stacking into a tower: rack
+   "Rack" goes from 8 rows to 4, roughly halving the page height. */
+.rack-body { padding: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 11px; background: var(--surface-2); align-items: start; }
 /* The rack is a white card; its body is a recessed well; each unit is a raised
    card sitting IN that well. Three distinct levels instead of three whites. */
 .unit {
@@ -426,6 +436,67 @@ button:not(.secondary):not(.ghost):not(.iconbtn):not(.input-affix):focus-visible
 .fan.spinning .blades { animation: spin linear infinite; }
 .legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
 .legend .grad { width: 130px; height: 8px; border-radius: 999px; background: linear-gradient(90deg, #5a8cd2, #50b478, #ebb432, var(--accent)); }
+
+/* ---------- ambient (room) air ----------
+   Humidity, pressure and VOC come from the gateway/router BME280 — there is no
+   humidity sensor inside a rack unit, the DS18B20 probes are temperature only.
+   So this is a room-level strip above the racks, never a per-unit figure. */
+.ambient { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.amb-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 18px;
+}
+.amb-name { display: flex; align-items: center; gap: 7px; font-weight: 650; font-size: 13px; margin-bottom: 10px; }
+.amb-name .muted { font-weight: 500; margin-left: auto; }
+.amb-vals { display: flex; gap: 20px; flex-wrap: wrap; }
+.amb-vals span { display: flex; flex-direction: column; }
+.amb-vals b { font-size: 19px; font-weight: 750; letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.amb-vals i { font-style: normal; font-size: 11px; color: var(--muted); }
+
+/* A unit is clickable, so it has to look and behave like a control. */
+.unit.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md); }
+.unit-btn { display: block; width: 100%; text-align: left; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.unit-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 14px; }
+
+/* An unassigned port is an EMPTY slot, not a broken fan. It used to draw a grey
+   <Fan>, which is exactly what an offline-but-assigned probe looks like — the
+   two states were indistinguishable. */
+.fan-tile.empty { background: transparent; border: 1px dashed var(--border-strong); box-shadow: none; }
+.fan-tile.empty:hover { background: transparent; border-color: var(--muted); }
+.fan-slot {
+  width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--border-strong);
+  display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 18px;
+}
+
+/* ---------- visualization: unit detail panel ----------
+   A grid column rather than an overlay, so selecting a unit reflows the racks
+   instead of covering them. */
+.viz-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.viz-layout.open { grid-template-columns: minmax(0, 1fr) 380px; }
+/* With the panel open each rack would drop to ~459px, which is under two units
+   wide — the racks turned back into the towers this change removed. Stacking
+   them full width instead gives each one enough room for 3 units per row, so
+   opening the panel makes the page shorter rather than longer. */
+.viz-layout.open .viz-grid { grid-template-columns: minmax(0, 1fr); }
+.udet { position: sticky; top: 16px; }
+.udet .hd { justify-content: space-between; }
+.udet-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; padding: 16px 18px; }
+.udet-side { text-align: center; }
+.udet-side .t { font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.udet-side .l { font-size: 11px; color: var(--muted); }
+.udet-arrow { color: var(--faint); display: flex; flex-direction: column; align-items: center; font-size: 11px; font-weight: 700; }
+.udet-probe { padding: 12px 18px; border-top: 1px solid var(--border); }
+.udet-probe .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--faint); font-weight: 600; }
+.udet-probe .v { font-size: 13px; margin-top: 2px; }
+.udet-probe .m { font-size: 11px; color: var(--muted); }
+
+/* Two-series line chart, scoped to the panel. */
+.udet-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.uc-grid { stroke: var(--border); stroke-width: 1; }
+.uc-tick { font-size: 8.5px; fill: var(--faint); text-anchor: end; }
+.uc-in  { stroke: #4f7fd0; stroke-width: 1.8; fill: none; stroke-linejoin: round; }
+.uc-out { stroke: #e0653f; stroke-width: 1.8; fill: none; stroke-linejoin: round; }
+.uc-band { fill: rgba(224, 101, 63, .10); }
 
 /* ===================================================================
    Dashboard two-column layout

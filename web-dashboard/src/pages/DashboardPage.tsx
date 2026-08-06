@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { usePoll } from "../usePoll";
 import { api, autoName } from "../api";
-import { AlertsCard, LiveTempsCard, fleetRollup, isOnline, tenantHighLimit, num } from "../components/Cards";
+import { AlertsCard, AttentionCard, attentionItems, fleetRollup, isOnline, tenantHighLimit, num } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
 import ThermalMap from "../components/ThermalMap";
 import DeltaTrend from "../components/DeltaTrend";
@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [sensors, setSensors] = useState<any[]>([]);
   const [roster, setRoster] = useState<any[]>([]);
   const [high, setHigh] = useState(40);
+  const [deltaLimit, setDeltaLimit] = useState(30);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -25,6 +26,9 @@ export default function DashboardPage() {
       // Must match what the alert engine evaluates against — the tenant
       // override, not the server default. See tenantHighLimit().
       setHigh(tenantHighLimit(t));
+      const tenant = (t?.thresholds || []).find((x: any) => x?.scope === "tenant");
+      const d = Number(tenant?.delta_c ?? t?.defaults?.delta_c);
+      setDeltaLimit(Number.isFinite(d) ? d : 30);
       setErr(null);
     } catch (e: any) {
       setErr(e.message || "Could not reach the cloud server.");
@@ -61,6 +65,14 @@ export default function DashboardPage() {
     .map((e) => `${autoName(e)} — ${fleet.neverReported(e) ? "has never reported" : "stopped reporting"}`)
     .join("\n");
 
+  // Computed here as well as in the card so the hero can't contradict it.
+  const darkNodes = dark.map((e) => ({
+    eui: e,
+    label: autoName(e),
+    reason: fleet.neverReported(e) ? "commissioned but has never reported" : "stopped reporting",
+  }));
+  const attention = attentionItems({ sensors, highLimit: high, deltaLimit, darkNodes });
+
 
   return (
     <>
@@ -85,6 +97,18 @@ export default function DashboardPage() {
                   <div className="pill"><div className="k">Reading</div><div className="v2">{top.kind === "stale" ? "—" : num(top.value, 1, "°C")}</div></div>
                   <div className="pill"><div className="k">Limit</div><div className="v2">{top.kind === "stale" ? "—" : num(top.threshold, 1, "°C")}</div></div>
                   <div className="pill"><div className="k">Open alerts</div><div className="v2">{alerts.length}</div></div>
+                </div>
+              </div>
+            ) : attention.length ? (
+              // Third state. "All clear" printed above a list of three things
+              // needing attention is exactly the sort of self-contradiction this
+              // dashboard keeps getting fixed for — nothing has crossed a limit,
+              // but that is not the same as nothing being wrong.
+              <div className="hero watch">
+                <h3 className="hd-ico"><Icon name="visibility" size={24} fill /> Nothing alarming</h3>
+                <div className="sub">
+                  No limit has been crossed, but {attention.length} thing{attention.length === 1 ? "" : "s"} need
+                  {attention.length === 1 ? "s" : ""} a look.
                 </div>
               </div>
             ) : (
@@ -122,7 +146,12 @@ export default function DashboardPage() {
 
             <GatewayStatus />
             <AlertsCard alerts={alerts} onAck={ack} />
-            <LiveTempsCard sensors={sensors} highLimit={high} />
+            {/* Exceptions, not an inventory. This slot used to hold a 16-row
+                table of every probe — the same readings the thermal map beside
+                it already shows, and the same table Environment & Logs shows in
+                full. A dashboard's job is "is anything wrong", so it now lists
+                only what someone would act on. */}
+            <AttentionCard sensors={sensors} highLimit={high} deltaLimit={deltaLimit} darkNodes={darkNodes} />
           </div>
 
           {/* Right rail — fills the space `.page`'s max-width used to leave empty
