@@ -171,17 +171,21 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
    single stack of cards, so a two-digit interval field became a 994px input and
    a three-row list became a 1360px band of whitespace. Cards need to flow into
    columns instead.
-   auto-fit (not auto-fill) is deliberate: empty tracks collapse, so a page with
-   only two cards gets two half-width cards rather than two narrow ones and a
-   dead third column. */
+   MASONRY, not grid. A grid row is as tall as its tallest card, so a short card
+   beside a tall one left a block of dead space underneath it for the full row
+   height — a one-line "Open alerts" next to the thresholds form opened a gap
+   several hundred pixels deep, and the next row started below both.
+   CSS multi-column packs each card directly under the one above it in the same
+   column, so there are no vertical gaps at all. `column-span: all` still gives
+   full-width cards, and `break-inside: avoid` stops a card being split down the
+   middle across two columns. */
 .page.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  gap: 18px;
-  align-items: start;
+  columns: 420px;
+  column-gap: 18px;
 }
-.page.cols > * { min-width: 0; }
-.page.cols > .card { margin-bottom: 0; }
+.page.cols > * { min-width: 0; break-inside: avoid; }
+/* The gap between stacked cards is now a margin, not a grid gap. */
+.page.cols > .card { margin-bottom: 18px; }
 /* Banners, empty states and anything that isn't a card belong across the row —
    an error message in a 420px column beside an unrelated card reads as if it
    applies only to that card. */
@@ -189,7 +193,7 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 .page.cols > .success,
 .page.cols > .center-msg,
 .page.cols > .bd,
-.page.cols > .card.wide { grid-column: 1 / -1; }
+.page.cols > .card.wide { column-span: all; }
 
 /* A long list inside a full-width card just moves the problem: .row is
    space-between, so at 1400px each row's two ends sit ~900px apart and the eye
@@ -626,9 +630,10 @@ html, body { overflow-x: hidden; }
   .page   { padding: 4px 18px 32px; }
   .topbar { padding: 18px 18px 14px; }
   .topbar-title h1 { font-size: 22px; }
-  /* Below this a 420px minimum can't be honoured once padding is taken out, and
-     auto-fit would otherwise overflow rather than drop to one column. */
-  .page.cols { grid-template-columns: 1fr; }
+  /* `columns: 420px` already collapses to a single column once the container
+     is narrower than that, so nothing extra is needed here — but pin it anyway
+     so a wide card's `column-span: all` can't leave a stray second column. */
+  .page.cols { columns: 1; }
 }
 
 @media (max-width: 760px) {
