@@ -12,7 +12,13 @@ export default function AlertsThresholdsPage() {
   const [sensors, setSensors] = useState<any[]>([]);
   const [high, setHigh] = useState("40");
   const [delta, setDelta] = useState("20");
-  const [defs, setDefs] = useState({ high_c: 40, delta_c: 20 });
+  // Relative humidity is a BAND, not a ceiling: too dry is an ESD risk, too damp
+  // risks condensation. It is measured by the router/gateway BME, so it applies
+  // to the room rather than to any one rack unit.
+  const [humMin, setHumMin] = useState("30");
+  const [humMax, setHumMax] = useState("70");
+  const [humOn, setHumOn] = useState(false);
+  const [defs, setDefs] = useState<any>({ high_c: 40, delta_c: 20, hum_min: 30, hum_max: 70 });
   // The SAVED limit alerts fire on. Kept separate from the `high` input so the
   // card below reflects what the server is actually using, not an unsaved edit.
   const [effHigh, setEffHigh] = useState(40);
@@ -67,13 +73,18 @@ export default function AlertsThresholdsPage() {
       const [a, c, t] = await Promise.all([api.alerts("open"), api.current(), api.thresholds()]);
       setAlerts(a.alerts || []);
       setSensors(c.sensors || []);
-      const d = t.defaults || { high_c: 40, delta_c: 20 };
+      const d = t.defaults || { high_c: 40, delta_c: 20, hum_min: 30, hum_max: 70 };
       setDefs(d);
       setEffHigh(tenantHighLimit(t));
       if (initial) {
         const tenant = (t.thresholds || []).find((x: any) => x.scope === "tenant");
         setHigh(String(tenant ? tenant.high_c : d.high_c));
         setDelta(String(tenant ? tenant.delta_c : d.delta_c));
+        // ?? not || : a saved hum_min of 0 is a real value and must not fall
+        // through to the default.
+        setHumMin(String(tenant?.hum_min ?? d.hum_min ?? 30));
+        setHumMax(String(tenant?.hum_max ?? d.hum_max ?? 70));
+        setHumOn(!!tenant?.hum_enabled);
       }
       setErr(null);
     } catch (e: any) {
@@ -124,10 +135,25 @@ export default function AlertsThresholdsPage() {
       setSaved({ ok: false, text: "High limit must be −50…150 °C and ΔT 0…150 °C." });
       return;
     }
+    // Validate the band client-side too. The server rejects an inverted band,
+    // but catching it here names the problem next to the field rather than
+    // surfacing a bare 400.
+    const hmin = Number(humMin), hmax = Number(humMax);
+    if (!Number.isFinite(hmin) || !Number.isFinite(hmax)) {
+      setSaved({ ok: false, text: "Both humidity limits must be numbers." });
+      return;
+    }
+    if (hmin < 0 || hmax > 100 || hmin >= hmax) {
+      setSaved({ ok: false, text: "Humidity must satisfy 0 ≤ min < max ≤ 100 %RH." });
+      return;
+    }
     if (saving) return;
     setSaving(true);
     try {
-      await api.putThreshold({ scope: "tenant", high_c: h, delta_c: d });
+      await api.putThreshold({
+        scope: "tenant", high_c: h, delta_c: d,
+        hum_min: hmin, hum_max: hmax, hum_enabled: humOn,
+      });
       setSaved({ ok: true, text: "Thresholds saved." });
       refresh(false); // pull back the value the card colours against
     } catch (e: any) {
@@ -358,6 +384,40 @@ export default function AlertsThresholdsPage() {
                 <label htmlFor="thr-delta">Max ΔT °C</label>
                 <input id="thr-delta" type="number" step="0.1" min={0} max={150}
                        value={delta} disabled={!isAdmin} onChange={(e) => setDelta(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Relative humidity — a band, and measured at the router/gateway
+                BME rather than per rack unit, so it is scoped to the room. */}
+            <div className="thr-hum">
+              <div className="row-hd">
+                <span className="hd-ico">
+                  <Icon name="humidity_percentage" size={17} /> Relative humidity
+                </span>
+                <label className="chk" title="Humidity alerting is off until you switch it on, so upgrading never starts emailing about a limit nobody chose.">
+                  <input type="checkbox" checked={humOn} disabled={!isAdmin}
+                         onChange={(e) => setHumOn(e.target.checked)} />
+                  Alert on humidity
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", opacity: humOn ? 1 : 0.55 }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label htmlFor="thr-hmin">Min %RH</label>
+                  <input id="thr-hmin" type="number" step="1" min={0} max={100}
+                         value={humMin} disabled={!isAdmin || !humOn}
+                         onChange={(e) => setHumMin(e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label htmlFor="thr-hmax">Max %RH</label>
+                  <input id="thr-hmax" type="number" step="1" min={0} max={100}
+                         value={humMax} disabled={!isAdmin || !humOn}
+                         onChange={(e) => setHumMax(e.target.value)} />
+                </div>
+              </div>
+              <div className="small muted" style={{ marginTop: 8 }}>
+                {humOn
+                  ? `Emails when room air leaves ${humMin}–${humMax} %RH. Measured at the gateway/router BME — the rack probes read temperature only.`
+                  : "Off — no humidity emails will be sent."}
               </div>
             </div>
             <div style={{ marginTop: 14 }} className="btnrow">
