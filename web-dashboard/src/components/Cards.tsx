@@ -234,7 +234,13 @@ const KIND_META: Record<string, { icon: string; label: string }> = {
   high_temp: { icon: "local_fire_department", label: "High temperature" },
   delta: { icon: "swap_horiz", label: "High ΔT" },
   stale: { icon: "sensors_off", label: "Sensor offline" },
+  hum_high: { icon: "humidity_high", label: "High humidity" },
+  hum_low: { icon: "humidity_low", label: "Low humidity" },
 };
+
+/** Alert kinds whose value/threshold are %RH rather than °C. Without this the
+ *  alert list rendered "78.0°C (limit 70.0°C)" for a humidity alert. */
+const RH_KINDS = new Set(["hum_high", "hum_low"]);
 
 export function AlertsCard({
   alerts,
@@ -255,10 +261,11 @@ export function AlertsCard({
           // Only "stale" was special-cased, so any other alert with a missing
           // value rendered "NaN°C (limit NaN°C)" in the most prominent element
           // on the page. num() degrades to an em dash instead.
+          const unit = RH_KINDS.has(a.kind) ? "%RH" : "°C";
           const sub =
             a.kind === "stale"
               ? "Sensor stopped reporting"
-              : `${num(a.value, 1, "°C")} (limit ${num(a.threshold, 1, "°C")})`;
+              : `${num(a.value, 1, unit)} (${a.kind === "hum_low" ? "min" : "limit"} ${num(a.threshold, 1, unit)})`;
           return (
             <div className="row" key={a.id}>
               <div className="btnrow">
