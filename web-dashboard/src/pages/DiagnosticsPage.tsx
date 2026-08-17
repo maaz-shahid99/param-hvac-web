@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { usePoll } from "../usePoll";
 import { api, autoName, downloadCsv } from "../api";
 import { ago, nowSec } from "../components/Cards";
+import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
 
@@ -12,7 +13,24 @@ type Crash = {
   occurrences?: number; first_ts?: number;
 };
 
-type Fleet = { fw_c3: number; fw_c6: number; heap_free: number; role: string; updated_at: number };
+type Fleet = {
+  fw_c3: number; fw_c6: number; heap_free: number; role: string; updated_at: number;
+  /** Non-empty while a restart is queued but not yet collected (older server: absent). */
+  reboot_req?: string; reboot_at?: number;
+};
+
+/** What each restart target actually costs, said plainly in the confirm dialog.
+ *  The C6 is the Thread radio, so restarting it drops every sensor's link for a
+ *  few seconds — materially heavier than bouncing the Wi-Fi uplink, and not
+ *  something to discover after clicking. */
+const REBOOT_TARGETS: { key: "c3" | "c6" | "both"; label: string; warn: string }[] = [
+  { key: "c3", label: "Wi-Fi uplink (C3)",
+    warn: "Restarts the Wi-Fi/BLE side only. The Thread mesh stays up and sensors keep reporting to the gateway." },
+  { key: "c6", label: "Thread radio (C6)",
+    warn: "Restarts the mesh radio. Every sensor drops its link for a few seconds and re-attaches on its own. Any open commissioning window closes." },
+  { key: "both", label: "Both",
+    warn: "Restarts the whole gateway. Expect roughly a minute with no readings." },
+];
 
 /** Resolve a crash's device to a truthful label.
  *
@@ -41,6 +59,27 @@ export default function DiagnosticsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const { isAdmin } = useAuth();
+  const [rebooting, setRebooting] = useState<string | null>(null);
+  const [rebootMsg, setRebootMsg] = useState<string | null>(null);
+
+  async function requestReboot(t: typeof REBOOT_TARGETS[number]) {
+    if (!confirm(`Restart ${t.label}?\n\n${t.warn}\n\nThe gateway collects this on its next check-in, so it starts within ~30 seconds.`)) return;
+    setRebooting(t.key);
+    setRebootMsg(null);
+    try {
+      await api.rebootGateway(t.key);
+      // Deliberately not "restarted" — nothing has happened yet. The request is
+      // queued until the gateway polls, and claiming otherwise would have people
+      // power-cycling the box when it stays up for another 20 seconds.
+      setRebootMsg(`Restart queued for ${t.label}. The gateway picks it up within ~30s.`);
+      refresh();
+    } catch (e: any) {
+      setRebootMsg(e?.message || "Could not queue the restart.");
+    } finally {
+      setRebooting(null);
+    }
+  }
 
   async function refresh() {
     try { setCrashes((await api.crashes()).crashes || []); setErr(null); }
@@ -98,6 +137,35 @@ export default function DiagnosticsPage() {
                 {fleet.heap_free && fleet.heap_free < 40000 ? "LOW" : "OK"}
               </span>
             </div>
+
+            {/* Restart controls. Admin-only, matching the server, where
+                /v1/gateway/reboot requires admin — showing a button that always
+                403s would just look broken to a member. */}
+            {isAdmin && (
+              <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                <div className="small muted" style={{ flex: "1 1 100%" }}>
+                  Restart the gateway remotely. Queued, not instant — it starts on the
+                  next check-in (~30s).
+                </div>
+                {REBOOT_TARGETS.map((t) => (
+                  <button
+                    key={t.key}
+                    className="btn"
+                    disabled={rebooting !== null}
+                    title={t.warn}
+                    onClick={() => requestReboot(t)}
+                  >
+                    {rebooting === t.key ? "Queueing…" : `Restart ${t.label}`}
+                  </button>
+                ))}
+                {fleet.reboot_req && (
+                  <span className="badge grey">
+                    {fleet.reboot_req} restart pending
+                  </span>
+                )}
+              </div>
+            )}
+            {rebootMsg && <div className="small muted" style={{ padding: "0 12px 12px" }}>{rebootMsg}</div>}
           </div>
         )}
         {/* Full width, but the reports flow into columns: 57 collapsed rows each

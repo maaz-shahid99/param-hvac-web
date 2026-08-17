@@ -204,6 +204,13 @@ export const api = {
   // Gateway self-report: firmware versions, free heap, mesh role.
   fleet: () => req("/v1/fleet"),
 
+  // Queue a gateway restart. NOT immediate — nothing can reach the gateway, so
+  // this parks server-side until its next 30s mesh post collects it.
+  // target: "c3" (Wi-Fi/BLE uplink, mesh unaffected) | "c6" (Thread radio —
+  // drops the mesh briefly) | "both".
+  rebootGateway: (target: "c3" | "c6" | "both") =>
+    req("/v1/gateway/reboot", { method: "POST", body: { target } }),
+
   otaAvailable: () => req("/v1/ota/available"),
   approveOta: (kind: string, version: number) =>
     req("/v1/ota/approve", { method: "POST", body: { kind, version } }),
