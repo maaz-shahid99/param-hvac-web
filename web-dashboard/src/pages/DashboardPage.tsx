@@ -4,6 +4,7 @@ import { usePoll } from "../usePoll";
 import { api, autoName } from "../api";
 import { AlertsCard, AttentionCard, attentionItems, fleetRollup, isOnline, tenantHighLimit, num } from "../components/Cards";
 import GatewayStatus from "../components/GatewayStatus";
+import PowerStat from "../components/PowerStat";
 import ThermalMap from "../components/ThermalMap";
 import DeltaTrend from "../components/DeltaTrend";
 import PageHeader from "../components/PageHeader";
@@ -140,6 +141,9 @@ export default function DashboardPage() {
                     : { dir: "up", text: `all ${fleet.nodesTotal} node${fleet.nodesTotal === 1 ? "" : "s"} reporting` }
                 }
               />
+              {/* Mains supply. Self-describes as "no sensor" until one is
+                  commissioned, so it is honest on sites without one. */}
+              <PowerStat alerts={alerts} />
               <Stat label="Hottest now" value={hottest ? hottest.toFixed(1) : "—"} unit={hottest ? "°C" : ""} chip="amber" icon="thermostat"
                 delta={{ dir: hottest >= high ? "down" : "flat", text: hottest >= high ? "over limit" : "within limit" }} />
             </div>

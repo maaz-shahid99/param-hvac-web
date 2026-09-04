@@ -10,8 +10,11 @@ type Sensor = {
   eui: string; name: string; loc: string; ts: number; online: boolean;
 };
 type Mesh = {
-  eui: string; name: string; role: "G" | "R"; online: boolean; ts: number;
+  eui: string; name: string; role: "G" | "R" | "P"; online: boolean; ts: number;
 };
+
+/** Gateway first, then the power sensor, then routers. */
+const ROLE_ORDER: Record<string, number> = { G: 0, P: 1, R: 2 };
 
 export default function DevicesPage() {
   const [sensors, setSensors] = useState<Sensor[]>([]);
@@ -61,19 +64,23 @@ export default function DevicesPage() {
       for (const d of roster) {
         if (String(d.kind) === "sensor") continue;
         const eui = String(d.eui).toLowerCase();
-        const role = (d.role === "G" || d.kind === "gateway") ? "G" : "R";
-        mm[eui] = { eui, name: d.name || autoName(eui, role === "G" ? "gateway" : "router"), role, online: false, ts: 0 };
+        // A power sensor is a mesh node like any other, but it is neither a
+        // gateway nor a router — give it its own role so it is not mislabelled.
+        const role = d.kind === "power" ? "P"
+          : (d.role === "G" || d.kind === "gateway") ? "G" : "R";
+        mm[eui] = { eui, name: d.name || autoName(eui, role === "G" ? "gateway" : role === "P" ? "power" : "router"), role, online: false, ts: 0 };
       }
       for (const r of routers) {
         const eui = String(r.eui).toLowerCase();
-        const role = String(r.kind) === "gateway" ? "G" : "R";
-        const d = (mm[eui] ||= { eui, name: autoName(eui, role === "G" ? "gateway" : "router"), role, online: false, ts: 0 });
-        d.role = role as "G" | "R";
+        const role = String(r.kind) === "power" ? "P"
+          : String(r.kind) === "gateway" ? "G" : "R";
+        const d = (mm[eui] ||= { eui, name: autoName(eui, role === "G" ? "gateway" : role === "P" ? "power" : "router"), role, online: false, ts: 0 });
+        d.role = role as "G" | "R" | "P";
         d.online = !!r.online;
         d.ts = Number(r.last_seen) || 0;
       }
       const mlist = Object.values(mm).sort((a, b) =>
-        a.role !== b.role ? (a.role === "G" ? -1 : 1)
+        a.role !== b.role ? (ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
           : a.online === b.online ? a.name.localeCompare(b.name) : a.online ? -1 : 1);
 
       setSensors(slist);
@@ -133,23 +140,24 @@ export default function DevicesPage() {
           ) : (
             mesh.map((d) => {
               const isGw = d.role === "G";
+              const isPwr = d.role === "P";
               return (
                 <div className="row" key={d.eui}>
                   <div className="btnrow">
-                    <span className={`iconwrap ${isGw ? "blue" : "grey"}`}>
-                      <Icon name={isGw ? "router" : "settings_input_antenna"} size={20} />
+                    <span className={`iconwrap ${isGw ? "blue" : isPwr ? "amber" : "grey"}`}>
+                      <Icon name={isGw ? "router" : isPwr ? "bolt" : "settings_input_antenna"} size={20} />
                     </span>
                     <div>
                       <div className="hd-ico">
                         <span className={`dot-s ${d.online ? "on" : "off"}`} /> {d.name}
-                        <span className="small muted">{isGw ? "· gateway" : "· router"}</span>
+                        <span className="small muted">{isGw ? "· gateway" : isPwr ? "· power sensor" : "· router"}</span>
                       </div>
                       <div className="small muted mono">{d.eui}{d.ts > 0 ? ` · ${ago(nowSec() - d.ts)}` : ""}</div>
                     </div>
                   </div>
                   <div className="btnrow">
                     <span className={`badge ${d.online ? "green" : "grey"}`}>{d.online ? "ONLINE" : "OFFLINE"}</span>
-                    <button className="iconbtn" title="Rename" aria-label={`Rename ${d.name || d.eui}`} onClick={() => rename(d.eui, isGw ? "gateway" : "router", d.role, d.name)}><Icon name="edit" size={18} /></button>
+                    <button className="iconbtn" title="Rename" aria-label={`Rename ${d.name || d.eui}`} onClick={() => rename(d.eui, isGw ? "gateway" : isPwr ? "power" : "router", d.role, d.name)}><Icon name="edit" size={18} /></button>
                     <button className="iconbtn" title="Remove" aria-label={`Remove ${d.name || d.eui} from the list`} onClick={() => remove(d.eui, d.name)}><Icon name="delete" size={18} /></button>
                   </div>
                 </div>
