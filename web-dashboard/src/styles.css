@@ -760,3 +760,28 @@ html, body { overflow-x: hidden; }
   0%   { left: -40%; }
   100% { left: 100%; }
 }
+
+
+/* --- Mains power outage banner -------------------------------------------
+   Site-wide, sits above the OTA prompt because losing mains outranks a firmware
+   update. Red rather than the amber used for warnings: cooling is not on backup
+   power, so this is the one banner that should never be mistaken for advisory. */
+.power-banner {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; margin-bottom: 16px;
+  border-radius: 12px;
+  background: rgba(220, 38, 38, .10);
+  border: 1px solid rgba(220, 38, 38, .35);
+}
+.power-banner .power-ico { display: flex; color: #dc2626; flex: 0 0 auto; }
+.power-banner .power-txt { flex: 1 1 auto; min-width: 0; }
+.power-banner .power-txt b { font-size: 14px; color: #b91c1c; }
+.power-banner .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.power-banner .power-dur {
+  flex: 0 0 auto; font-size: 15px; font-weight: 700; color: #b91c1c;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 620px) {
+  .power-banner { flex-wrap: wrap; }
+  .power-banner .power-dur { margin-left: 36px; }
+}

@@ -5,6 +5,7 @@ import { api } from "../api";
 import { usePoll } from "../usePoll";
 import Icon from "./Icon";
 import OtaBanner from "./OtaBanner";
+import PowerBanner from "./PowerBanner";
 import OtaProgressModal from "./OtaProgressModal";
 import { OtaUpdateProvider, useOtaUpdate } from "../otaUpdate";
 import ErrorBoundary from "./ErrorBoundary";
@@ -125,6 +126,9 @@ function LayoutInner() {
       <main className="content">
         {/* Mounted at the shell level so a pending optional update is visible on
             every page, not just the dashboard. Self-hides when there's none. */}
+        {/* Above OtaBanner on purpose: a mains outage outranks a firmware
+            update prompt. Self-hides when power is fine. */}
+        <PowerBanner />
         <OtaBanner />
         {/* Keyed on the route so navigating away clears a crashed page instead
             of trapping the user on it. */}
