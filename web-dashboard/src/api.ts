@@ -16,6 +16,9 @@ export type FleetSnapshot = {
    *  the gateway doesn't report its own; the server derives this from the fact
    *  that pushes keep arriving. Absent on older servers. */
   uplink_since?: number | null;
+  /** 1 while a BLE-window request is queued and not yet collected. */
+  ble_req?: number | null;
+  ble_at?: number | null;
 };
 
 export class ApiError extends Error {
@@ -227,6 +230,13 @@ export const api = {
   // drops the mesh briefly) | "both".
   rebootGateway: (target: "c3" | "c6" | "both") =>
     req("/v1/gateway/reboot", { method: "POST", body: { target } }),
+
+  /** Ask the gateway to open its 5-minute management BLE window — the remote
+   *  equivalent of a short press of its button. From firmware v24 the gateway
+   *  no longer advertises permanently. Queued like a restart, so it only works
+   *  while the gateway is still checking in; the physical button remains the
+   *  fallback for a unit that has dropped off the network. */
+  openGatewayBle: () => req("/v1/gateway/ble", { method: "POST", body: {} }),
 
   otaAvailable: () => req("/v1/ota/available"),
   approveOta: (kind: string, version: number) =>

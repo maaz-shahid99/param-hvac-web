@@ -17,6 +17,8 @@ type Fleet = {
   fw_c3: number; fw_c6: number; heap_free: number; role: string; updated_at: number;
   /** Non-empty while a restart is queued but not yet collected (older server: absent). */
   reboot_req?: string; reboot_at?: number;
+  /** 1 while a BLE-window request is queued but not yet collected. */
+  ble_req?: number; ble_at?: number;
 };
 
 /** What each restart target actually costs, said plainly in the confirm dialog.
@@ -62,6 +64,24 @@ export default function DiagnosticsPage() {
   const { isAdmin } = useAuth();
   const [rebooting, setRebooting] = useState<string | null>(null);
   const [rebootMsg, setRebootMsg] = useState<string | null>(null);
+  const [bleBusy, setBleBusy] = useState(false);
+
+  async function requestBle() {
+    setBleBusy(true);
+    setRebootMsg(null);
+    try {
+      await api.openGatewayBle();
+      setRebootMsg(
+        "BLE window queued. The gateway opens it on its next check-in (~30s) " +
+        "and it stays open for 5 minutes — its LED double-blinks while it is."
+      );
+      refresh();
+    } catch (e: any) {
+      setRebootMsg(e?.message || "Could not queue the BLE window.");
+    } finally {
+      setBleBusy(false);
+    }
+  }
 
   async function requestReboot(t: typeof REBOOT_TARGETS[number]) {
     if (!confirm(`Restart ${t.label}?\n\n${t.warn}\n\nThe gateway collects this on its next check-in, so it starts within ~30 seconds.`)) return;
@@ -158,10 +178,23 @@ export default function DiagnosticsPage() {
                     {rebooting === t.key ? "Queueing…" : `Restart ${t.label}`}
                   </button>
                 ))}
+                {/* Not a restart, so it is separated from them: this only wakes
+                    the management radio for 5 minutes. */}
+                <button
+                  className="btn"
+                  disabled={bleBusy}
+                  title="Open the gateway's Bluetooth window for 5 minutes so the app can connect. The unit's own button does the same thing, and is the only route once it is off the network."
+                  onClick={requestBle}
+                >
+                  {bleBusy ? "Queueing…" : "Open BLE (5 min)"}
+                </button>
                 {fleet.reboot_req && (
                   <span className="badge grey">
                     {fleet.reboot_req} restart pending
                   </span>
+                )}
+                {!!fleet.ble_req && (
+                  <span className="badge grey">BLE window pending</span>
                 )}
               </div>
             )}
