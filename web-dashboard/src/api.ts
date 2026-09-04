@@ -12,6 +12,10 @@ export type FleetSnapshot = {
   updated_at: number | null;
   reboot_req?: string | null;
   reboot_at?: number | null;
+  /** Start of the gateway's current unbroken run of contact. NOT device uptime —
+   *  the gateway doesn't report its own; the server derives this from the fact
+   *  that pushes keep arriving. Absent on older servers. */
+  uplink_since?: number | null;
 };
 
 export class ApiError extends Error {
