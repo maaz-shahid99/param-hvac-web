@@ -20,10 +20,16 @@ export default function SettingsPage() {
   const [settingsErr, setSettingsErr] = useState<string | null>(null);
   const [granBusy, setGranBusy] = useState(false);
   const [intervalBusy, setIntervalBusy] = useState(false);
+  // Minutes in the UI, seconds on the wire: nobody thinks about reminder
+  // frequency in seconds, and a raw 900 in a box invites a mistyped 90.
+  const [repeatMin, setRepeatMin] = useState("15");
+  const [repeatBusy, setRepeatBusy] = useState(false);
+  const [repeatSaved, setRepeatSaved] = useState(false);
   useEffect(() => {
     api.settings().then((s) => {
       setGran(s.alert_granularity || "sensor");
       setInterval(String(s.collect_interval_s ?? 60));
+      setRepeatMin(String(Math.round((s.alert_repeat_s ?? 900) / 60)));
       setSettingsErr(null);
     }).catch((e: any) => {
       setSettingsErr(e?.message || "Could not load settings from the server.");
@@ -64,6 +70,31 @@ export default function SettingsPage() {
       setSettingsErr(e?.message || "Could not save the collection interval.");
     } finally {
       setIntervalBusy(false);
+    }
+  };
+
+  const saveRepeat = async () => {
+    if (repeatBusy) return;
+    const raw = Number(repeatMin);
+    if (!Number.isFinite(raw) || raw < 0) {
+      setSettingsErr("Reminder interval must be a number of minutes (0 = never).");
+      return;
+    }
+    // 0 is a real choice — "one mail at onset, one on recovery, nothing between".
+    // Anything else is floored at 1 minute; the server floors again at 60s.
+    const mins = raw === 0 ? 0 : Math.max(1, Math.min(1440, Math.round(raw)));
+    if (mins !== raw) setSettingsErr(`Using ${mins} min.`);
+    else setSettingsErr(null);
+    setRepeatMin(String(mins));
+    setRepeatBusy(true);
+    try {
+      await api.putSettings({ alert_repeat_s: mins * 60 });
+      setRepeatSaved(true);
+      setTimeout(() => setRepeatSaved(false), 1500);
+    } catch (e: any) {
+      setSettingsErr(e?.message || "Could not save the reminder interval.");
+    } finally {
+      setRepeatBusy(false);
     }
   };
 
@@ -171,6 +202,34 @@ export default function SettingsPage() {
                 {gran === "probe"
                   ? "Each mapped probe alerts independently at its own exhaust."
                   : "One alert per sensor on its hottest probe (default)."}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="card">
+            <div className="hd hd-ico">
+              <Icon name="notifications_active" size={18} /> Alert reminders
+            </div>
+            <div className="bd">
+              <label>
+                How often to re-send an alert that is still active (minutes, 0 = never)
+              </label>
+              <input className="input-sm" type="number" min={0} max={1440} value={repeatMin}
+                     onChange={(e) => setRepeatMin(e.target.value)} />
+              <div className="small muted" style={{ marginTop: 6 }}>
+                {repeatMin === "0"
+                  ? "One email when a limit is crossed and one when it recovers — no reminders in between."
+                  : `A rack still over its limit is re-reported every ${repeatMin} min until it recovers.`}
+                {" "}Devices going offline always send exactly one email, then one when they return —
+                that is a state, not a recurring condition, and this setting does not affect it.
+              </div>
+              <div style={{ marginTop: 12 }} className="btnrow">
+                <button onClick={saveRepeat} disabled={repeatBusy}>
+                  <Icon name="save" size={17} /> {repeatBusy ? "Saving…" : "Save"}
+                </button>
+                {repeatSaved && <span className="small muted">Saved.</span>}
               </div>
             </div>
           </div>
