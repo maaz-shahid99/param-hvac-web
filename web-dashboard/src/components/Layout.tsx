@@ -5,6 +5,8 @@ import { api } from "../api";
 import { usePoll } from "../usePoll";
 import Icon from "./Icon";
 import OtaBanner from "./OtaBanner";
+import OtaProgressModal from "./OtaProgressModal";
+import { OtaUpdateProvider, useOtaUpdate } from "../otaUpdate";
 import ErrorBoundary from "./ErrorBoundary";
 
 const items = [
@@ -25,8 +27,25 @@ const NavCtx = createContext<{ open: () => void }>({ open: () => {} });
 export const useNavDrawer = () => useContext(NavCtx);
 
 export default function Layout() {
+  // The provider must sit ABOVE everything it guards, so the shell itself is a
+  // child of it. LayoutInner is where the actual chrome lives.
+  return (
+    <OtaUpdateProvider>
+      <LayoutInner />
+      <OtaProgressModal />
+    </OtaUpdateProvider>
+  );
+}
+
+function LayoutInner() {
   const { profile, signOut } = useAuth();
   const { pathname } = useLocation();
+  // While an update is in flight the shell is inert: the only uplink to the mesh
+  // is mid-flash, and an admin wandering into Diagnostics to queue a reboot right
+  // then would be actively harmful. `inert` covers modern browsers; the modal
+  // also runs a JS focus trap for the rest.
+  const { job: otaJob } = useOtaUpdate();
+  const otaBusy = !!otaJob && otaJob.phase !== "done" && otaJob.phase !== "failed";
   const isAdmin = profile?.role === "admin";
   const navItems = items.filter((it) => !it.adminOnly || isAdmin);
 
@@ -59,7 +78,7 @@ export default function Layout() {
 
   return (
     <NavCtx.Provider value={{ open: () => setNavOpen(true) }}>
-    <div className="layout">
+    <div className="layout" {...(otaBusy ? { inert: "" as any, "aria-hidden": true } : {})}>
       {navOpen && (
         <button
           className="navscrim"

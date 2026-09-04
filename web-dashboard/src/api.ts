@@ -1,6 +1,19 @@
 // Thin REST client for the HVAC Cloud Server. Mirrors the Flutter app's
 // CloudApi: a configurable base URL + a bearer JWT, JSON in/out.
 
+/** Gateway self-report from GET /v1/fleet. `updated_at` is stamped by the
+ *  APPLIANCE, whose clock can run well ahead of the browser's — compare it with
+ *  a previous reading, never subtract it from Date.now(). */
+export type FleetSnapshot = {
+  fw_c3: number | null;
+  fw_c6: number | null;
+  heap_free: number | null;
+  role: string | null;
+  updated_at: number | null;
+  reboot_req?: string | null;
+  reboot_at?: number | null;
+};
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -202,7 +215,7 @@ export const api = {
   // than the fleet's current firmware — mandatory ones auto-apply and are never
   // listed. Approving one lets the gateway pick it up on its next OTA poll.
   // Gateway self-report: firmware versions, free heap, mesh role.
-  fleet: () => req("/v1/fleet"),
+  fleet: () => req("/v1/fleet") as Promise<{ fleet: FleetSnapshot | null }>,
 
   // Queue a gateway restart. NOT immediate — nothing can reach the gateway, so
   // this parks server-side until its next 30s mesh post collects it.

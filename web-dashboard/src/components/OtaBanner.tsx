@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePoll } from "../usePoll";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
+import { useOtaUpdate } from "../otaUpdate";
 import Icon from "./Icon";
 
 /** One optional update as returned by GET /v1/ota/available. */
@@ -31,6 +32,7 @@ export default function OtaBanner() {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
+  const { track } = useOtaUpdate();
 
   const poll = useCallback(async () => {
     if (status !== "signedIn") {
@@ -48,11 +50,15 @@ export default function OtaBanner() {
 
   usePoll(poll, 60000);
 
-  async function approve(u: Update) {
+  async function approve(u: Update, opener?: HTMLElement | null) {
     setBusy((b) => new Set(b).add(u.kind));
     setErr(null);
     try {
       await api.approveOta(u.kind, u.version);
+      // Hand off to the shell-level tracker BEFORE re-polling: that poll is what
+      // drops this build off /v1/ota/available and unmounts this whole banner,
+      // so anything owned here would be destroyed mid-update.
+      track(u.kind, u.version, opener);
       await poll();
     } catch (e) {
       setErr(
@@ -90,7 +96,10 @@ export default function OtaBanner() {
             </div>
           </div>
           {isAdmin ? (
-            <button onClick={() => approve(u)} disabled={busy.has(u.kind)}>
+            <button
+              onClick={(e) => approve(u, e.currentTarget)}
+              disabled={busy.has(u.kind)}
+            >
               {busy.has(u.kind) ? "Approving…" : "Update now"}
             </button>
           ) : (
