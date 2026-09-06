@@ -199,10 +199,19 @@ export const api = {
   deleteDevice: (eui: string) =>
     req(`/v1/devices/${encodeURIComponent(eui)}`, { method: "DELETE" }),
 
-  // tenant settings (alert granularity + collection interval)
+  // tenant settings (alert granularity + collection + archive intervals).
+  // putSettings sends a PARTIAL patch — only the keys one card changed. The
+  // server treats every field as optional for exactly this reason.
   settings: () => req("/v1/settings"),
   putSettings: (b: Record<string, unknown>) =>
     req("/v1/settings", { method: "PUT", body: b }),
+
+  /** Nightly CSV archive: when it last ran, what it committed, what broke.
+   *  Readable by any member on purpose — an unattended backup that has been
+   *  failing silently for a month looks exactly like one that is working. */
+  archiveStatus: () => req("/v1/archive/status"),
+  /** Run the archive now instead of waiting for the nightly tick (admin). */
+  runArchive: () => req("/v1/archive/run", { method: "POST" }),
 
   /** Bucketed intake/exhaust/ΔT history per rack unit, for the trend chart.
    *  Aggregated server-side the same way the alert engine computes ΔT, so the
