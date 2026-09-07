@@ -29,6 +29,10 @@ export default function SettingsPage() {
   const [archiveMin, setArchiveMin] = useState("5");
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [archiveSaved, setArchiveSaved] = useState(false);
+  // How long a device must stay offline before anyone is emailed about it.
+  const [staleMin, setStaleMin] = useState("10");
+  const [staleBusy, setStaleBusy] = useState(false);
+  const [staleSaved, setStaleSaved] = useState(false);
   const [arch, setArch] = useState<any>(null);
   const [archRunBusy, setArchRunBusy] = useState(false);
   useEffect(() => {
@@ -37,6 +41,7 @@ export default function SettingsPage() {
       setInterval(String(s.collect_interval_s ?? 60));
       setRepeatMin(String(Math.round((s.alert_repeat_s ?? 900) / 60)));
       setArchiveMin(String(Math.round((s.archive_interval_s ?? 300) / 60)));
+      setStaleMin(String(Math.round((s.stale_notify_after_s ?? 600) / 60)));
       setSettingsErr(null);
     }).catch((e: any) => {
       setSettingsErr(e?.message || "Could not load settings from the server.");
@@ -69,6 +74,28 @@ export default function SettingsPage() {
       setSettingsErr(e?.message || "Could not save the archive interval.");
     } finally {
       setArchiveBusy(false);
+    }
+  };
+  const saveStale = async () => {
+    if (staleBusy) return;
+    const raw = Number(staleMin);
+    if (!Number.isFinite(raw) || raw < 0) {
+      setSettingsErr("Offline delay must be a number of minutes (0 = report immediately).");
+      return;
+    }
+    const mins = raw === 0 ? 0 : Math.max(1, Math.min(1440, Math.round(raw)));
+    if (mins !== raw) setSettingsErr(`Using ${mins} min.`);
+    else setSettingsErr(null);
+    setStaleMin(String(mins));
+    setStaleBusy(true);
+    try {
+      await api.putSettings({ stale_notify_after_s: mins * 60 });
+      setStaleSaved(true);
+      setTimeout(() => setStaleSaved(false), 1500);
+    } catch (e: any) {
+      setSettingsErr(e?.message || "Could not save the offline delay.");
+    } finally {
+      setStaleBusy(false);
     }
   };
   const dlCsv = async (path: string, file: string) => {
@@ -322,6 +349,37 @@ export default function SettingsPage() {
                 Recorded for reference only. Devices currently report on a fixed
                 ~12&nbsp;second timer built into their firmware and do not read this
                 value, so changing it does not change how often they send.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="card">
+            <div className="hd hd-ico">
+              <Icon name="wifi_off" size={18} /> Offline reporting delay
+            </div>
+            <div className="bd">
+              <label>
+                How long a device must stay offline before you are emailed
+                (minutes, 0 = report immediately)
+              </label>
+              <input className="input-sm" type="number" min={0} max={1440} value={staleMin}
+                     onChange={(e) => setStaleMin(e.target.value)} />
+              <div className="small muted" style={{ marginTop: 6 }}>
+                {staleMin === "0"
+                  ? "Every dropout is emailed the moment it is detected, including brief ones that recover by themselves."
+                  : <>A device that drops out and returns within {staleMin} min is not emailed
+                     about at all — no offline notice and no back-online notice. Sensors report
+                     over a radio mesh, so short gaps are normal and recover on their own.</>}
+                {" "}It still shows as offline on the dashboard straight away, and a device that
+                is already down longer than this is reported on the next check.
+              </div>
+              <div style={{ marginTop: 12 }} className="btnrow">
+                <button onClick={saveStale} disabled={staleBusy}>
+                  <Icon name="save" size={17} /> {staleBusy ? "Saving…" : "Save"}
+                </button>
+                {staleSaved && <span className="small muted">Saved.</span>}
               </div>
             </div>
           </div>
